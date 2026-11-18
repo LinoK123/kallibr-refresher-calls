@@ -307,6 +307,8 @@ a:hover{text-decoration:underline;}
 .kpi-7 .kpi-card{padding:16px 16px;}
 .kpi-7 .kpi-value{font-size:1.45rem;}
 .people-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.people-row.clickable{cursor:pointer;border-radius:10px;padding-left:8px;padding-right:8px;margin:0 -8px;transition:background 0.13s;}
+.people-row.clickable:hover{background:var(--row-hover);}
 .people-row:last-child{border-bottom:none;}
 .people-row .item-info{flex:1;min-width:0;}
 @media(max-width:1300px){.kpi-7{grid-template-columns:repeat(4,1fr);}}
@@ -1015,7 +1017,7 @@ function cardRow(c, actions) {
   const due = c.earliest_due ? RC.dueLabel(c.earliest_due, today()) : null;
   const callBack = RC.callbackDue(c, S.me && S.me.id, today())
     ? ' <span class="badge badge-warning">🟡 Call back today</span>' : '';
-  return `<tr>
+  return `<tr class="clickable" data-open-key="${esc(c.card_key)}" title="Open this card">
     <td><div class="cell-name">${esc(c.target_name)}${callBack}</div><div class="cell-sub">${esc(KIND_LABEL[c.kind] || '')}</div></td>
     <td>${c.org_name ? esc(c.org_name) : '<span class="muted">—</span>'}</td>
     <td>${stateTags(c.locations)}</td>
@@ -1086,7 +1088,7 @@ function callbackRows(items, showHolder, emptyText) {
   return items.map(({ card: c, bucket, date }) => {
     const [cls, label] = CALLBACK_BADGE[bucket];
     const when = bucket === 'overdue' ? `was due ${RC.fmtWeekday(date)}` : bucket === 'today' ? 'Today' : RC.fmtWeekday(date);
-    return `<div class="people-row">
+    return `<div class="people-row clickable" data-open-key="${esc(c.card_key)}" title="Open this card">
       <span class="badge ${cls}" style="min-width:84px;text-align:center">${esc(label)}</span>
       <div class="item-info"><div class="item-name">${esc(c.target_name)}</div>
         <div class="item-sub">${c.org_name ? esc(c.org_name) : esc(KIND_LABEL[c.kind] || '')}${showHolder ? ` · held by ${esc(staffName(c.claimed_by))}` : ''}</div></div>
@@ -1616,7 +1618,7 @@ async function renderPeople() {
     ? S.cards.filter((c) => c.claimed_by && c.open_lines > 0)
         .sort((a, b) => staffName(a.claimed_by).localeCompare(staffName(b.claimed_by), 'en-AU') || RC._byQueueOrder(a, b))
     : RC.myCards(S.cards, person, t);
-  $('people-cards').innerHTML = held.length ? held.map((c) => `<div class="people-row">
+  $('people-cards').innerHTML = held.length ? held.map((c) => `<div class="people-row clickable" data-open-key="${esc(c.card_key)}" title="Open this card">
       <div class="item-info"><div class="item-name">${esc(c.target_name)}${RC.callbackDue(c, c.claimed_by, t) ? ' <span class="badge badge-warning">🟡 Call back due</span>' : ''}</div>
         <div class="item-sub">${c.org_name ? esc(c.org_name) + ' · ' : ''}${esc(c.open_lines)} open refresher${c.open_lines === 1 ? '' : 's'}${everyone ? ` · held by ${esc(staffName(c.claimed_by))}` : ''}</div></div>
       <button class="btn-ghost btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button></div>`).join('')
@@ -1842,7 +1844,13 @@ document.addEventListener('click', (e) => {
     return;
   }
   const btn = e.target.closest('[data-act]');
-  if (!btn || btn.disabled) return;
+  if (!btn) {
+    // anywhere else on a card's row opens it (buttons, links and form controls keep their own jobs)
+    const row = e.target.closest('[data-open-key]');
+    if (row && !e.target.closest('a, button, select, input, textarea, label')) openCard(row.dataset.openKey);
+    return;
+  }
+  if (btn.disabled) return;
   const key = btn.dataset.key;
   switch (btn.dataset.act) {
     case 'take': takeCard(key); break;
