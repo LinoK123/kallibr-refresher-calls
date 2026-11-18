@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kallibr Starter</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Same as kallibr-theme.css, embedded so this file works on its own */
+/* ==========================================================================
+   Kallibr theme — extracted from the Kallibr CRM / Sales Dashboard
+   Soft pastel, card-based admin UI. Fonts: DM Serif Display (headings,
+   big numbers) + DM Sans (everything else). Load in <head>:
+   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+   ========================================================================== */
+
+/* ---------- Tokens ---------- */
+:root{
+  /* Pastel pairs: light fill + stronger accent */
+  --rose:#f9c8d0;  --rose2:#f2a0b0;
+  --sage:#c8e6c8;  --sage2:#9ecf9e;
+  --sky:#bde0f7;   --sky2:#87c5ef;
+  --lav:#ddd4f0;   --lav2:#b8a9de;   /* lavender = primary brand colour */
+  --peach:#fddcb5; --peach2:#f9be7c;
+  --brand-deep:#7B68C8;              /* stronger purple for emphasis */
+  --primary-hover:#9d8dcc;
+
+  /* Surfaces & text */
+  --cream:#fdf8f2;   /* page background */
+  --white:#ffffff;   /* cards */
+  --text:#2d2d3a;    /* body text */
+  --text2:#6b6b82;   /* muted text, labels */
+  --border:#ece8f4;  /* lavender-tinted hairline */
+  --row-hover:#faf8ff;
+
+  /* Semantic (text on tint) */
+  --success:#2d7a2d; --success-bg:#edf7ed; --success-line:#9ecf9e;
+  --danger:#c0392b;  --danger-bg:#fde8e8;
+  --warning:#856404; --warning-bg:#fff3cd; --warning-strong:#e6a817;
+  --orange:#a05c00;  --orange-bg:#fddcb5;
+  --info:#1565a8;    --info-bg:#e3f0fb;
+  --purple:#5a4a8a;  --purple-bg:#ece8f7;
+
+  /* Shape & depth */
+  --shadow:0 2px 16px rgba(100,80,160,0.08);
+  --shadow2:0 8px 32px rgba(100,80,160,0.14);
+  --radius:16px;    /* banners, small panels */
+  --radius2:24px;   /* cards */
+  --radius-ctl:10px;/* buttons, inputs */
+
+  --font-display:'DM Serif Display',serif;
+  --font-body:'DM Sans',sans-serif;
+}
+
+/* ---------- Base ---------- */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font-body);background:var(--cream);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+button,input,select,textarea{font-family:var(--font-body);}
+a{color:var(--info);text-decoration:none;}
+a:hover{text-decoration:underline;}
+.num{text-align:right;font-weight:500;font-variant-numeric:tabular-nums;}
+.muted{color:var(--text2);}
+
+/* ---------- App shell: fixed sidebar + main ---------- */
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--white);border-right:1.5px solid var(--border);display:flex;flex-direction:column;z-index:100;box-shadow:2px 0 16px rgba(100,80,160,0.06);}
+.sidebar-logo{padding:26px 24px 18px;border-bottom:1.5px solid var(--border);}
+.sidebar-logo h1{font-family:var(--font-display);font-size:1.1rem;font-weight:400;color:var(--text);line-height:1.3;}
+.sidebar-logo span{display:block;font-size:0.68rem;color:var(--text2);margin-top:2px;letter-spacing:0.04em;text-transform:uppercase;}
+.sidebar-nav{padding:14px 10px;flex:1;overflow-y:auto;}
+.nav-label{font-size:0.63rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text2);padding:8px 12px 5px;opacity:0.6;}
+.nav-label + .nav-item{margin-top:0;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;font-size:0.86rem;font-weight:500;color:var(--text2);transition:all 0.16s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left;}
+.nav-item:hover{background:var(--lav);color:var(--text);}
+.nav-item.active{background:var(--lav);color:var(--text);font-weight:600;}
+.nav-item .icon{font-size:0.95rem;width:18px;text-align:center;}
+.nav-count{margin-left:auto;background:var(--warning-strong);color:#fff;border-radius:99px;font-size:0.64rem;font-weight:700;padding:1px 7px;}
+.sidebar-footer{padding:14px 22px;border-top:1.5px solid var(--border);font-size:0.7rem;color:var(--text2);}
+.main{margin-left:220px;padding:30px 34px;min-height:100vh;}
+.page{display:none;}.page.active{display:block;}
+
+/* ---------- Page header ---------- */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px;flex-wrap:wrap;gap:12px;}
+.page-title{font-family:var(--font-display);font-size:1.9rem;font-weight:400;color:var(--text);line-height:1.2;}
+.page-subtitle{font-size:0.83rem;color:var(--text2);margin-top:3px;}
+.back-btn{display:inline-flex;align-items:center;gap:8px;padding:7px 15px;border-radius:var(--radius-ctl);border:1.5px solid var(--border);background:var(--white);cursor:pointer;font-size:0.83rem;font-weight:500;color:var(--text2);margin-bottom:18px;transition:all 0.14s;}
+.back-btn:hover{background:var(--lav);color:var(--text);}
+
+/* ---------- Cards ---------- */
+.card{background:var(--white);border-radius:var(--radius2);padding:22px 26px;box-shadow:var(--shadow);border:1.5px solid var(--border);margin-bottom:20px;}
+.card-title{font-family:var(--font-display);font-size:1.05rem;font-weight:400;margin-bottom:3px;}
+.card-subtitle{font-size:0.76rem;color:var(--text2);margin-bottom:18px;}
+/* Small-caps section heading with a hairline running to the right */
+.section-title{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+/* Gradient hero banner */
+.hero{background:linear-gradient(135deg,var(--lav) 0%,var(--sky) 100%);border-radius:var(--radius2);padding:28px 32px;margin-bottom:20px;border:1.5px solid var(--border);}
+.hero h2{font-family:var(--font-display);font-size:1.5rem;font-weight:400;margin-bottom:6px;}
+.hero-stats{display:flex;gap:32px;margin-top:18px;flex-wrap:wrap;}
+
+/* ---------- Grids ---------- */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:20px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+.grid-2>.card,.grid-3>.card{margin-bottom:0;}
+
+/* ---------- KPI cards: coloured 4px top stripe ---------- */
+.kpi-card{background:var(--white);border-radius:var(--radius2);padding:20px 22px;box-shadow:var(--shadow);border:1.5px solid var(--border);position:relative;overflow:hidden;}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--kpi-accent,var(--lav2));}
+.grid-4>.kpi-card:nth-child(4n+1){--kpi-accent:var(--rose2);}
+.grid-4>.kpi-card:nth-child(4n+2){--kpi-accent:var(--sage2);}
+.grid-4>.kpi-card:nth-child(4n+3){--kpi-accent:var(--sky2);}
+.grid-4>.kpi-card:nth-child(4n+4){--kpi-accent:var(--peach2);}
+.kpi-card.accent-danger{--kpi-accent:var(--danger);}
+.kpi-card.accent-warning{--kpi-accent:var(--warning-strong);}
+.kpi-card.accent-success{--kpi-accent:var(--success);}
+.kpi-card.accent-brand{--kpi-accent:var(--brand-deep);}
+.kpi-label{font-size:0.73rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+.kpi-value{font-family:var(--font-display);font-size:1.7rem;color:var(--text);}
+.kpi-sub{font-size:0.75rem;color:var(--text2);margin-top:3px;}
+/* Compact stat tile (inside cards) */
+.stat-box{background:var(--cream);border-radius:12px;padding:12px 14px;border:1px solid var(--border);}
+.stat-box-label{font-size:0.66rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;}
+.stat-box-value{font-family:var(--font-display);font-size:1.2rem;color:var(--text);}
+
+/* ---------- Buttons ---------- */
+.btn-primary{padding:8px 18px;border-radius:var(--radius-ctl);border:none;background:var(--lav2);color:#fff;font-size:0.83rem;font-weight:600;cursor:pointer;transition:all 0.14s;}
+.btn-primary:hover{background:var(--primary-hover);}
+.btn-ghost{padding:8px 18px;border-radius:var(--radius-ctl);border:1.5px solid var(--border);background:var(--white);color:var(--text2);font-size:0.83rem;font-weight:500;cursor:pointer;transition:all 0.14s;}
+.btn-ghost:hover{background:var(--lav);color:var(--text);}
+.btn-danger{padding:8px 18px;border-radius:var(--radius-ctl);border:1.5px solid var(--danger-bg);background:var(--white);color:var(--danger);font-size:0.83rem;font-weight:600;cursor:pointer;transition:all 0.14s;}
+.btn-danger:hover{background:var(--danger-bg);}
+.btn-sm{font-size:0.72rem;padding:5px 11px;white-space:nowrap;}
+.btn-primary:disabled,.btn-ghost:disabled{opacity:0.45;cursor:default;}
+
+/* Segmented toggle (e.g. Monthly / Quarterly / Half-Yearly) */
+.segmented{display:inline-flex;gap:4px;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:4px;}
+.segmented button{padding:6px 14px;border-radius:8px;border:none;background:none;font-size:0.8rem;font-weight:500;color:var(--text2);cursor:pointer;transition:all 0.16s;}
+.segmented button.active{background:var(--lav2);color:#fff;font-weight:600;}
+.segmented button:hover:not(.active){background:var(--lav);color:var(--text);}
+
+/* Filter pills */
+.filter-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.pill{padding:6px 15px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-size:0.8rem;font-weight:500;color:var(--text2);cursor:pointer;transition:all 0.14s;}
+.pill:hover{border-color:var(--lav2);color:var(--text);}
+.pill.active{background:var(--lav2);color:#fff;border-color:var(--lav2);}
+.pill.pill-danger.active{background:var(--danger);border-color:var(--danger);}
+.pill.pill-success.active{background:var(--success);border-color:var(--success);}
+/* Checkbox pill ("CSQ only"-style toggle filter) */
+.check-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-size:0.8rem;font-weight:500;color:var(--text2);cursor:pointer;user-select:none;white-space:nowrap;transition:all 0.14s;}
+.check-pill:hover{border-color:var(--success-line);}
+.check-pill:has(input:checked){background:var(--success-bg);border-color:var(--success-line);color:var(--success);font-weight:600;}
+.check-pill input{accent-color:var(--success);margin:0;cursor:pointer;}
+
+/* Selectable chips (multi-select options in forms) */
+.chips{display:flex;flex-wrap:wrap;gap:7px;padding:4px 0;}
+.chip{padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-size:0.78rem;cursor:pointer;transition:all 0.13s;color:var(--text2);}
+.chip:hover{border-color:var(--lav2);}
+.chip.selected{background:var(--lav);border-color:var(--lav2);color:var(--text);font-weight:600;}
+/* Option tiles (pick one/many, e.g. team members) */
+.option-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.option-tile{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);cursor:pointer;background:var(--white);transition:all 0.15s;}
+.option-tile:hover{border-color:var(--lav2);background:var(--lav);}
+.option-tile.selected{border-color:var(--lav2);background:var(--lav);box-shadow:0 0 0 2px var(--lav2);}
+
+/* ---------- Badges & tags ---------- */
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.7rem;font-weight:600;white-space:nowrap;}
+.badge-success{background:var(--success-bg);color:var(--success);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.badge-warning{background:var(--warning-bg);color:var(--warning);}
+.badge-orange{background:var(--orange-bg);color:var(--orange);}
+.badge-info{background:var(--info-bg);color:var(--info);}
+.badge-purple{background:var(--purple-bg);color:var(--purple);}
+.badge-neutral{background:#ececf0;color:var(--text2);}
+.badge-rose{background:var(--rose);color:#b33050;}
+/* Square-ish tag (codes like QLD / NSW / VIC) */
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.68rem;font-weight:700;letter-spacing:0.02em;margin-right:4px;white-space:nowrap;}
+.tag-rose{background:#f6e0e6;color:#9c2a47;}
+.tag-blue{background:#e3f0fb;color:#1565a8;}
+.tag-violet{background:#e9e5f6;color:#4a3f8a;}
+.tag-green{background:var(--success-bg);color:var(--success);border:1px solid var(--success-line);padding:1px 5px;border-radius:4px;font-size:0.64rem;}
+
+/* ---------- Avatars ---------- */
+.avatar{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:0.78rem;color:#fff;flex-shrink:0;}
+.avatar.sm{width:22px;height:22px;font-size:0.6rem;}
+.avatar.lg{width:40px;height:40px;font-size:0.88rem;}
+.avatar-stack{display:inline-flex;}
+.avatar-stack .avatar{border:2px solid #fff;}
+.avatar-stack .avatar+.avatar{margin-left:-7px;}
+
+/* ---------- Tables ---------- */
+.table-wrap{background:var(--white);border-radius:var(--radius2);border:1.5px solid var(--border);box-shadow:var(--shadow);overflow:hidden;}
+.table-scroll{overflow-x:auto;}
+.table{width:100%;border-collapse:collapse;font-size:0.81rem;}
+.table th{background:var(--lav);padding:11px 14px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text);letter-spacing:0.04em;text-transform:uppercase;border-bottom:1.5px solid var(--border);white-space:nowrap;}
+.table th.sortable{cursor:pointer;user-select:none;}
+.table th.sortable:hover{background:var(--lav2);color:#fff;}
+.table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.table tr:last-child td{border-bottom:none;}
+.table tbody tr:hover td{background:var(--row-hover);}
+.table tbody tr.clickable{cursor:pointer;}
+.pagination{padding:10px 18px;border-top:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:0.76rem;color:var(--text2);}
+.pg-btns{display:flex;gap:4px;}
+.pg-btn{padding:4px 10px;border-radius:7px;border:1.5px solid var(--border);background:var(--white);font-size:0.76rem;cursor:pointer;color:var(--text2);transition:all 0.13s;}
+.pg-btn:hover{background:var(--lav);color:var(--text);border-color:var(--lav2);}
+.pg-btn.active{background:var(--lav2);color:#fff;border-color:var(--lav2);}
+.pg-btn:disabled{opacity:0.38;cursor:default;}
+
+/* ---------- Lists with mini bars ---------- */
+.list{background:var(--white);border-radius:var(--radius2);border:1.5px solid var(--border);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;}
+.list-header{padding:14px 18px;border-bottom:1.5px solid var(--border);background:var(--lav);display:flex;align-items:center;justify-content:space-between;font-size:0.72rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;}
+.list-item{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.13s;}
+.list-item:last-child{border-bottom:none;}
+.list-item:hover{background:#f6f3ff;}
+.list-item.selected{background:var(--lav);border-left:3px solid var(--lav2);}
+.item-info{flex:1;min-width:0;}
+.item-name{font-size:0.83rem;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.item-sub{font-size:0.7rem;color:var(--text2);margin-top:1px;}
+.item-val{font-size:0.83rem;font-weight:600;white-space:nowrap;}
+.bar-track{height:5px;border-radius:4px;background:var(--border);overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--lav2),var(--sky2));}
+
+/* ---------- Forms ---------- */
+.form-group{margin-bottom:14px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-row.three{grid-template-columns:1fr 1fr 1fr;}
+.form-label{font-size:0.73rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;}
+.form-label .req{color:var(--danger);}
+.form-input,.form-select,.form-textarea{width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:var(--radius-ctl);font-size:0.84rem;color:var(--text);background:var(--white);outline:none;transition:border-color 0.15s;}
+.form-input,.form-select{appearance:none;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--lav2);}
+.form-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b82' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;}
+.form-textarea{resize:vertical;min-height:80px;line-height:1.5;}
+.form-hint{font-size:0.7rem;color:var(--text2);margin-top:5px;}
+.search-input{flex:1;min-width:180px;padding:9px 15px;border:1.5px solid var(--border);border-radius:12px;font-size:0.86rem;background:var(--white);color:var(--text);outline:none;transition:border-color 0.16s;}
+.search-input:focus{border-color:var(--lav2);}
+.search-input::placeholder{color:var(--text2);}
+
+/* ---------- Feedback ---------- */
+.banner{border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;border:1.5px solid;}
+.banner-warning{background:#fff8e6;border-color:#f1d28a;}
+.banner-danger{background:#fdf0f0;border-color:#f0b4b4;}
+.banner-info{background:var(--info-bg);border-color:#b8d8f2;}
+.banner-title{font-weight:700;font-size:0.86rem;}
+.banner-warning .banner-title{color:#8a6100;}.banner-danger .banner-title{color:var(--danger);}.banner-info .banner-title{color:var(--info);}
+.banner-sub{font-size:0.74rem;color:var(--text2);margin-top:2px;}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:220px;color:var(--text2);font-size:0.86rem;text-align:center;}
+.empty-state .empty-icon{font-size:2rem;}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:10px 18px;border-radius:12px;font-size:0.82rem;font-weight:500;z-index:400;opacity:0;transform:translateY(8px);transition:all 0.22s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+/* ---------- Modal ---------- */
+.modal-backdrop{position:fixed;inset:0;background:rgba(45,45,58,0.38);display:none;align-items:flex-start;justify-content:center;z-index:300;padding:6vh 16px;overflow-y:auto;}
+.modal-backdrop.open{display:flex;}
+.modal{background:var(--white);border-radius:var(--radius2);box-shadow:var(--shadow2);border:1.5px solid var(--border);width:100%;max-width:640px;padding:24px 26px;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.modal-x{border:none;background:none;font-size:1rem;color:var(--text2);cursor:pointer;padding:4px 9px;border-radius:8px;}
+.modal-x:hover{background:var(--lav);color:var(--text);}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;}
+
+/* ---------- Timeline / log entries ---------- */
+.log-item{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:var(--cream);}
+.log-item:last-child{margin-bottom:0;}
+.log-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;flex-wrap:wrap;}
+.log-title{font-weight:700;font-size:0.82rem;}
+.log-date{font-size:0.72rem;color:var(--text2);}
+.log-notes{font-size:0.8rem;line-height:1.5;margin-bottom:6px;}
+
+/* ---------- Responsive ---------- */
+@media(max-width:1100px){.grid-3{grid-template-columns:1fr 1fr;}}
+@media(max-width:900px){
+  .grid-4{grid-template-columns:repeat(2,1fr);}
+  .grid-2,.grid-3,.form-row,.form-row.three{grid-template-columns:1fr;}
+  .main{padding:18px 14px;}
+}
+@media(max-width:600px){.sidebar{display:none;}.main{margin-left:0;}}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo"><h1>App Name</h1><span>Short descriptor · Kallibr</span></div>
+  <div class="sidebar-nav">
+    <div class="nav-label">Overview</div>
+    <button class="nav-item active" onclick="showPage('overview',this)"><span class="icon">📊</span> Overview</button>
+    <div class="nav-label" style="margin-top:10px">Records</div>
+    <button class="nav-item" onclick="showPage('records',this)"><span class="icon">🗂️</span> Records <span class="nav-count">3</span></button>
+    <button class="nav-item" onclick="showPage('form',this)"><span class="icon">📝</span> Form Example</button>
+  </div>
+  <div class="sidebar-footer">128 records · updated today</div>
+</nav>
+
+<main class="main">
+
+<!-- OVERVIEW: page header, KPIs, chart cards -->
+<div id="page-overview" class="page active">
+  <div class="page-header">
+    <div><div class="page-title">Overview</div><div class="page-subtitle">One-line description of what this page shows</div></div>
+    <div class="segmented"><button class="active" onclick="setSeg(this)">Monthly</button><button onclick="setSeg(this)">Quarterly</button><button onclick="setSeg(this)">Yearly</button></div>
+  </div>
+
+  <div class="grid-4">
+    <div class="kpi-card"><div class="kpi-label">Total</div><div class="kpi-value">$1.24M</div><div class="kpi-sub">All time</div></div>
+    <div class="kpi-card"><div class="kpi-label">Last 12 Months</div><div class="kpi-value">$486K</div><div class="kpi-sub">Rolling</div></div>
+    <div class="kpi-card"><div class="kpi-label">Active</div><div class="kpi-value">312</div><div class="kpi-sub">+18 this month</div></div>
+    <div class="kpi-card accent-danger"><div class="kpi-label">🔴 Overdue</div><div class="kpi-value">7</div><div class="kpi-sub">Semantic accent example</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Trend</div><div class="card-subtitle">Bars coloured by year</div>
+    <div style="position:relative;height:250px"><canvas id="barChart"></canvas></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card"><div class="card-title">Line</div><div class="card-subtitle">Soft filled line</div><div style="position:relative;height:210px"><canvas id="lineChart"></canvas></div></div>
+    <div class="card"><div class="card-title">Breakdown</div><div class="card-subtitle">Doughnut, legend on the right</div><div style="position:relative;height:210px"><canvas id="donutChart"></canvas></div></div>
+  </div>
+
+  <div class="hero">
+    <h2>Hero banner</h2>
+    <div class="muted" style="font-size:0.83rem">Gradient lavender → sky, used for a detail page header.</div>
+    <div class="hero-stats">
+      <div><div class="stat-box-label">Revenue</div><div class="stat-box-value">$84,210</div></div>
+      <div><div class="stat-box-label">Growth</div><div class="stat-box-value">+12.4%</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- RECORDS: filters, table, badges, avatars, banner, list -->
+<div id="page-records" class="page">
+  <div class="page-header">
+    <div><div class="page-title">Records</div><div class="page-subtitle">Click a row to open it</div></div>
+    <button class="btn-primary" onclick="openModal()">+ Add Record</button>
+  </div>
+
+  <div class="banner banner-warning"><div class="banner-title">🔗 2 records need review</div><div class="banner-sub">Banners flag something the user should act on.</div></div>
+
+  <div class="filter-row">
+    <button class="pill active">All</button>
+    <button class="pill pill-danger">🔴 Lapsed</button>
+    <button class="pill pill-success">🌱 New</button>
+    <select class="form-select" style="width:auto;min-width:150px"><option>All team members</option></select>
+    <label class="check-pill"><input type="checkbox">Flagged only</label>
+    <input class="search-input" style="max-width:220px" placeholder="🔍  Search…">
+    <span class="muted" style="font-size:0.8rem">3 records</span>
+  </div>
+
+  <div class="table-wrap"><div class="table-scroll"><table class="table">
+    <thead><tr><th class="sortable">Name</th><th>Status</th><th>Region</th><th class="sortable num">Value</th><th>Owner</th></tr></thead>
+    <tbody>
+      <tr class="clickable"><td style="font-weight:600">Acme Civil Pty Ltd <span class="tag tag-green">CSQ</span></td><td><span class="badge badge-orange">🟠 Declining</span></td><td><span class="tag tag-rose">QLD</span></td><td class="num">$48.2K</td><td><span class="avatar-stack"><span class="avatar sm" style="background:#b8a9de">BE</span><span class="avatar sm" style="background:#5b9bd5">GR</span></span></td></tr>
+      <tr class="clickable"><td style="font-weight:600">Harbour Rail Services</td><td><span class="badge badge-danger">🔴 Lapsed</span></td><td><span class="tag tag-blue">NSW 60%</span><span class="tag tag-rose">QLD 40%</span></td><td class="num">$21.9K</td><td><span class="avatar sm" style="background:#9ecf9e">HA</span></td></tr>
+      <tr class="clickable"><td style="font-weight:600">Southbank Electrical</td><td><span class="badge badge-success">🌱 New</span></td><td><span class="tag tag-violet">VIC</span></td><td class="num">$6.4K</td><td><span class="muted">—</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="pagination"><span>3 items</span><div class="pg-btns"><button class="pg-btn" disabled>‹</button><button class="pg-btn active">1</button><button class="pg-btn" disabled>›</button></div></div></div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="list">
+      <div class="list-header"><span>Ranked list</span><span>1–3 of 3</span></div>
+      <div class="list-item selected"><div class="item-info"><div class="item-name">First item</div><div class="item-sub">$12K prior · $18K last 12</div></div><div class="bar-track" style="width:48px"><div class="bar-fill" style="width:100%"></div></div><div class="item-val">$30K</div></div>
+      <div class="list-item"><div class="item-info"><div class="item-name">Second item</div><div class="item-sub">$8K prior · $9K last 12</div></div><div class="bar-track" style="width:48px"><div class="bar-fill" style="width:57%"></div></div><div class="item-val">$17K</div></div>
+      <div class="list-item"><div class="item-info"><div class="item-name">Third item</div><div class="item-sub">$2K prior · $4K last 12</div></div><div class="bar-track" style="width:48px"><div class="bar-fill" style="width:20%"></div></div><div class="item-val">$6K</div></div>
+    </div>
+    <div class="card">
+      <div class="section-title">📅 History</div>
+      <div class="log-item"><div class="log-top"><span class="log-title" style="color:var(--success)">● Interested</span><span class="log-date">12 Nov 2026</span></div><div class="log-notes">Timeline entries sit on cream with a hairline border.</div><span class="badge badge-info">Follow up 19 Nov</span></div>
+      <div class="log-item"><div class="log-top"><span class="log-title" style="color:var(--info)">● Left Message</span><span class="log-date">5 Nov 2026</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- FORM: sections, inputs, chips, option tiles, empty state -->
+<div id="page-form" class="page">
+  <div class="page-header"><div><div class="page-title">Form Example</div><div class="page-subtitle">Inputs, chips and option tiles</div></div></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title">📋 Details</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Name <span class="req">*</span></label><input class="form-input" placeholder="e.g. John Smith"></div>
+        <div class="form-group"><label class="form-label">Size</label><select class="form-select"><option>Select…</option><option>1–10</option></select></div>
+      </div>
+      <div class="form-group"><div class="form-label">Interests</div>
+        <div class="chips"><button class="chip selected" onclick="this.classList.toggle('selected')">Forklift</button><button class="chip" onclick="this.classList.toggle('selected')">Dogging</button><button class="chip" onclick="this.classList.toggle('selected')">Working at Heights</button></div>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-textarea" placeholder="Key points…"></textarea><div class="form-hint">Hints sit under the field in small muted text.</div></div>
+      <div style="display:flex;gap:8px"><button class="btn-primary" onclick="toast('Saved ✓')">Save</button><button class="btn-ghost">Cancel</button><button class="btn-danger" style="margin-left:auto">Delete</button></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Assigned To</div>
+      <div class="option-grid">
+        <div class="option-tile selected" onclick="this.classList.toggle('selected')"><span class="avatar" style="background:#b8a9de">BE</span><b style="font-size:0.8rem">Ben</b></div>
+        <div class="option-tile" onclick="this.classList.toggle('selected')"><span class="avatar" style="background:#9ecf9e">HA</span><b style="font-size:0.8rem">Hailey</b></div>
+        <div class="option-tile" onclick="this.classList.toggle('selected')"><span class="avatar" style="background:#f9be7c">LI</span><b style="font-size:0.8rem">Lino</b></div>
+        <div class="option-tile" onclick="this.classList.toggle('selected')"><span class="avatar" style="background:#5b9bd5">GR</span><b style="font-size:0.8rem">Grace</b></div>
+      </div>
+      <div class="empty-state"><div class="empty-icon">🗂️</div><div>Empty states: icon + one short line</div></div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal" role="dialog" aria-labelledby="modal-title">
+    <div class="modal-head"><div class="card-title" id="modal-title" style="margin:0">Add a Record</div><button class="modal-x" onclick="closeModal()" aria-label="Close">✕</button></div>
+    <div class="form-group"><label class="form-label">Name <span class="req">*</span></label><input class="form-input"></div>
+    <div class="modal-foot"><button class="btn-ghost" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="closeModal();toast('Record added ✓')">Add Record</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── UI helpers ──
+function showPage(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');if(btn)btn.classList.add('active');}
+function setSeg(btn){btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+function openModal(){document.getElementById('modal').classList.add('open');}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+const fmt=v=>v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1e3).toFixed(1)+'K':'$'+v.toFixed(0);
+
+// ── Chart styling (Chart.js 4) — reuse these settings for every chart ──
+const PASTEL=['#f2a0b0','#9ecf9e','#87c5ef','#b8a9de','#f9be7c','#a8d8ea','#f7c5e0','#b5ead7','#ffdac1','#c7ceea','#ffb7b2','#a2c4c9'];
+const YEAR_FILL=['rgba(184,169,222,0.7)','rgba(135,197,239,0.7)','rgba(158,207,158,0.7)','rgba(249,190,124,0.7)'];
+const YEAR_LINE=['#b8a9de','#87c5ef','#9ecf9e','#f9be7c'];
+const axes={
+  x:{grid:{display:false},ticks:{font:{size:10},color:'#6b6b82'}},
+  y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{callback:v=>fmt(v),font:{size:10},color:'#6b6b82'},border:{display:false}}
+};
+Chart.defaults.font.family="'DM Sans',sans-serif";
+
+const labels=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const yearOf=i=>i<6?0:1; // demo: first half one year, second half the next
+new Chart(document.getElementById('barChart'),{type:'bar',
+  data:{labels,datasets:[{data:[42,51,38,60,72,55,64,70,81,77,90,86].map(v=>v*1000),backgroundColor:labels.map((_,i)=>YEAR_FILL[yearOf(i)]),borderColor:labels.map((_,i)=>YEAR_LINE[yearOf(i)]),borderWidth:1.5,borderRadius:6}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.raw)}}},scales:axes}});
+
+new Chart(document.getElementById('lineChart'),{type:'line',
+  data:{labels,datasets:[{data:[12,18,15,22,19,26,24,30,28,34,31,38].map(v=>v*1000),borderColor:'#b8a9de',backgroundColor:'rgba(184,169,222,0.12)',borderWidth:2.5,pointBackgroundColor:'#b8a9de',pointRadius:3,fill:true,tension:0.4}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.raw)}}},scales:axes}});
+
+new Chart(document.getElementById('donutChart'),{type:'doughnut',
+  data:{labels:['Forklift','Dogging','Rigging','EWP','Other'],datasets:[{data:[34,22,18,14,12],backgroundColor:PASTEL,borderWidth:2,borderColor:'#fff'}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{font:{size:10},boxWidth:11}}}}});
+</script>
+</body>
+</html>

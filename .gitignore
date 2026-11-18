@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+*.db
+*.bak
+.env
+refresher_push.json
