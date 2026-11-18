@@ -12,7 +12,7 @@ A shared call list for Kallibr staff to ring bookers about overdue and upcoming 
   - Click a column header to sort. Click again to reverse, and a third time to go back to the usual order.
   - **Take** claims a card for you; nobody else can work it until you release it.
 - **Card:** the same kind of filters, plus sortable columns, for the students on a card.
-- **My cards:** your cards. **📅 Your call-backs** at the top lists every call-back you've set, soonest first (overdue, today, this week, later), each with **Open →**. Columns sort like the Queue. A card with no activity for 14 days and no call-back still to come goes back to the queue overnight.
+- **My cards:** your cards. **📅 Your call-backs** at the top lists every call-back you've set, soonest first (overdue, today, this week, later), each with **Open →**. The same filters as the Queue narrow the table below it (the call-backs list always shows everything), and columns sort like the Queue. A card with no activity for 14 days and no call-back still to come goes back to the queue overnight.
 - **Monday email:** each team member with overdue call-backs or call-backs due this week gets one email listing them. It comes from the nightly push on the first run of each week, normally Monday morning (see "Call-back emails" below).
 - **Card:** ring the booker, pick an outcome per refresher (or "Apply one outcome to all"), add notes and an optional call-back date, then **Save Call Log**.
 - **Dashboard:** totals, the team table (this week, this month, all time) and progress by month of each student's last course.

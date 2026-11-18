@@ -417,6 +417,30 @@ a:hover{text-decoration:underline;}
       <div><div class="page-title">My cards</div><div class="page-subtitle">Cards you've taken, with call-backs due today at the top</div></div>
     </div>
     <div class="card"><div class="section-title">📅 Your call-backs</div><div id="mine-callbacks"></div></div>
+    <div class="filter-row" id="mine-filters">
+      <button class="pill" data-filter="state" data-value="QLD">QLD</button>
+      <button class="pill" data-filter="state" data-value="NSW">NSW</button>
+      <button class="pill" data-filter="state" data-value="VIC">VIC</button>
+      <button class="pill" data-filter="state" data-value="G+L">G+L</button>
+      <span style="width:8px"></span>
+      <button class="pill" data-filter="type" data-value="Confined Space">Confined space</button>
+      <button class="pill" data-filter="type" data-value="Heights">Heights</button>
+      <button class="pill" data-filter="type" data-value="HSR">HSR</button>
+      <span style="width:8px"></span>
+      <button class="pill pill-danger" data-filter="due" data-value="overdue">🔴 Overdue</button>
+      <button class="pill" data-filter="due" data-value="upcoming">🟡 Due within 4 months</button>
+    </div>
+    <div class="filter-row">
+      <select class="form-select" id="m-kind" style="width:auto;min-width:170px" aria-label="Card type">
+        <option value="">All card types</option>
+        <option value="booker">Bookers</option>
+        <option value="organisation">Organisations</option>
+        <option value="individual">Individuals</option>
+      </select>
+      <input class="search-input" id="m-search" style="max-width:300px" placeholder="🔍  Search organisation or booker…" aria-label="Search your cards">
+      <span class="muted" style="font-size:0.8rem" id="mine-count"></span>
+      <button class="link-btn hidden" id="mine-clear" data-act="mine-clear">Clear filters</button>
+    </div>
     <div id="mine-table"></div>
   </div>
 
@@ -896,6 +920,7 @@ const S = {
   sb: null, me: null, cards: [], staff: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
   cardData: null, cardNotice: null, cardView: null,
   filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, queueSort: { key: null, dir: null }, mineSort: { key: null, dir: null },
+  mineFilters: { state: '', type: '', due: '', kind: '', search: '' },
   entering: false,
 };
 const today = () => RC.sydneyToday(new Date());
@@ -1077,9 +1102,18 @@ function renderMine() {
     'No call-backs set. When you save a call with a call-back date, it shows here.');
   // usual order: call-backs due first, then biggest; a clicked column overrides it until its third click
   const usual = RC.myCards(S.cards, S.me.id, today());
-  const list = S.mineSort.key ? RC.sortCards(usual, S.mineSort.key, S.mineSort.dir) : usual;
-  if (!list.length) {
+  const filtered = RC.filterCards(usual, S.mineFilters);
+  const list = S.mineSort.key ? RC.sortCards(filtered, S.mineSort.key, S.mineSort.dir) : filtered;
+  $('mine-count').textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
+  $('mine-clear').classList.toggle('hidden', !Object.values(S.mineFilters).some(Boolean));
+  document.querySelectorAll('#mine-filters .pill').forEach((p) =>
+    p.classList.toggle('active', S.mineFilters[p.dataset.filter] === p.dataset.value));
+  if (!usual.length) {
     $('mine-table').innerHTML = emptyState('🗂️', "You haven't taken any cards yet. Pick one from the Queue.");
+    return;
+  }
+  if (!list.length) {
+    $('mine-table').innerHTML = emptyState('🔍', 'None of your cards match these filters. Clear a filter to see more.');
     return;
   }
   $('mine-table').innerHTML = cardTable(list.map((c) => cardRow(c,
@@ -1800,6 +1834,13 @@ document.addEventListener('click', (e) => {
     renderQueue();
     return;
   }
+  const minePill = e.target.closest('#mine-filters .pill');
+  if (minePill) {
+    const f = minePill.dataset.filter;
+    S.mineFilters[f] = S.mineFilters[f] === minePill.dataset.value ? '' : minePill.dataset.value;
+    renderMine();
+    return;
+  }
   const btn = e.target.closest('[data-act]');
   if (!btn || btn.disabled) return;
   const key = btn.dataset.key;
@@ -1812,6 +1853,11 @@ document.addEventListener('click', (e) => {
     case 'queue-sort': S.queueSort = RC.nextSort(S.queueSort, btn.dataset.sort); S.queuePage = 0; renderQueue(); break;
     case 'queue-clear': clearQueueFilters(); break;
     case 'mine-sort': S.mineSort = RC.nextSort(S.mineSort, btn.dataset.sort); renderMine(); break;
+    case 'mine-clear':
+      S.mineFilters = { state: '', type: '', due: '', kind: '', search: '' };
+      $('m-kind').value = ''; $('m-search').value = '';
+      renderMine();
+      break;
     case 'signout': signOut(); break;
     case 'signin-restart': restartSignIn(); break;
     default: if (typeof onAction === 'function') onAction(btn.dataset.act, btn, e);
@@ -1819,6 +1865,8 @@ document.addEventListener('click', (e) => {
 });
 $('f-kind').addEventListener('change', (e) => { S.filters.kind = e.target.value; S.queuePage = 0; renderQueue(); });
 $('f-search').addEventListener('input', (e) => { S.filters.search = e.target.value; S.queuePage = 0; renderQueue(); });
+$('m-kind').addEventListener('change', (e) => { S.mineFilters.kind = e.target.value; renderMine(); });
+$('m-search').addEventListener('input', (e) => { S.mineFilters.search = e.target.value; renderMine(); });
 $('signin-form').addEventListener('submit', sendCode);
 $('code-form').addEventListener('submit', verifyCode);
 
