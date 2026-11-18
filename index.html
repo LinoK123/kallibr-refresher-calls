@@ -288,6 +288,16 @@ a:hover{text-decoration:underline;}
 .cell-sub{font-size:0.72rem;color:var(--text2);margin-top:1px;}
 .actions{display:flex;gap:6px;justify-content:flex-end;}
 .loading{padding:40px;text-align:center;color:var(--text2);font-size:0.86rem;}
+.hero-sub{font-size:0.83rem;color:var(--text2);}
+.hero-summary{margin-top:12px;font-weight:600;font-size:0.9rem;}
+.hero-line{margin-top:8px;font-size:0.8rem;color:var(--text2);}
+.line-hint{display:block;font-size:0.7rem;color:var(--text2);margin-top:2px;}
+.hist-row td{background:var(--cream);font-size:0.78rem;}
+.hist-row:hover td{background:var(--cream) !important;}
+.table .form-select{padding:6px 30px 6px 10px;font-size:0.78rem;min-width:190px;}
+.log-notes{white-space:pre-wrap;word-break:break-word;}
+.log-outcomes{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;}
+.tools-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -407,6 +417,15 @@ a:hover{text-decoration:underline;}
 </main>
 </div>
 
+<!-- Do-not-call question -->
+<div class="modal-backdrop" id="dnc-modal">
+  <div class="modal" role="dialog" aria-labelledby="dnc-title" style="max-width:500px">
+    <div class="modal-head"><div class="card-title" id="dnc-title" style="margin:0">🚫 Do not call</div><button class="modal-x" data-act="dnc-cancel" aria-label="Close">✕</button></div>
+    <p style="font-size:0.86rem;line-height:1.5;margin-bottom:12px">Mark this whole card as do not call? Every open refresher on it will be closed and this person won't appear on future lists.</p>
+    <div class="modal-foot"><button class="btn-ghost" data-act="dnc-no">No, just this refresher</button><button class="btn-danger" data-act="dnc-yes">Yes, the whole card</button></div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script id="rc-logic">
@@ -474,8 +493,75 @@ const RC = (() => {
     return `The list was last updated ${fmtDate(sydneyToday(new Date(at)))}. It may be out of date.`;
   }
 
-  return { PROFILE_URL, profileUrl, esc, sydneyToday, fmtMonth, fmtDate, dueLabel, sortQueue, filterCards,
-           queueCards, myCards, staleBanner, _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
+  function fmtDateTime(iso) {
+    if (!iso) return '';
+    const p = sydneyParts(new Date(iso));
+    const h12 = p.h % 12 === 0 ? 12 : p.h % 12;
+    return `${fmtDate(`${p.y}-${p.m}-${p.d}`)}, ${h12}:${p.min} ${p.h < 12 ? 'am' : 'pm'}`;
+  }
+
+  // ---- card view ----
+  const OUTCOMES = [
+    { code: 'no_answer', label: 'No answer / left message', status: 'pending' },
+    { code: 'call_back', label: 'Call back', status: 'pending' },
+    { code: 'info_sent', label: 'Info or quote sent', status: 'pending' },
+    { code: 'will_book', label: 'Will book', status: 'pending' },
+    { code: 'not_needed', label: 'Not needed', status: 'lost' },
+    { code: 'went_elsewhere', label: 'Went elsewhere', status: 'lost' },
+    { code: 'left_company', label: 'Left the company', status: 'lost' },
+    { code: 'do_not_call', label: 'Do not call', status: 'lost' },
+  ];
+  const STATUS_BADGE = {
+    not_called: ['badge-neutral', 'Not called'], pending: ['badge-warning', '🟡 Pending'],
+    won: ['badge-success', '🟢 Won'], lost: ['badge-danger', '🔴 Lost'],
+  };
+  const outcomeLabel = (code) => (OUTCOMES.find((o) => o.code === code) || {}).label || (code || '');
+  const isOpen = (l) => (l.status === 'not_called' || l.status === 'pending') && l.in_window !== false;
+  const cmp = (a, b) => (a === b ? 0 : a === null || a === undefined ? 1 : b === null || b === undefined ? -1 : a < b ? -1 : 1);
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  function groupLines(lines, students, todayIso) {
+    const names = new Map(students.map((s) => [s.contact_id, s.full_name]));
+    const by = new Map();
+    for (const l of lines) {
+      if (!by.has(l.contact_id)) by.set(l.contact_id, []);
+      by.get(l.contact_id).push(l);
+    }
+    const groups = [...by.entries()].map(([contactId, rows]) => {
+      const sorted = [...rows].sort((a, b) => cmp(a.due_date, b.due_date) || cmp(a.refresher_type, b.refresher_type));
+      const open = sorted.filter(isOpen);
+      return { contact_id: contactId, full_name: names.get(contactId) || `Contact ${contactId}`,
+               dueForBoth: open.length >= 2, rows: sorted, firstOpenDue: open.length ? open[0].due_date : null };
+    });
+    return groups.sort((a, b) => cmp(a.firstOpenDue, b.firstOpenDue) || cmp(a.full_name, b.full_name));
+  }
+
+  function cardSummary(groups, todayIso) {
+    const open = groups.flatMap((g) => g.rows.filter(isOpen));
+    if (!open.length) return 'No open refreshers';
+    const students = groups.filter((g) => g.rows.some(isOpen)).length;
+    const overdue = open.filter((l) => l.due_date < todayIso).length;
+    const upcoming = open.length - overdue;
+    const latest = open.reduce((m, l) => (l.due_date > m ? l.due_date : m), '');
+    const due = [];
+    if (overdue) due.push(`${overdue} overdue`);
+    if (upcoming) due.push(`${upcoming} due by ${fmtMonth(latest)}`);
+    return [plural(students, 'student'), plural(open.length, 'refresher'), due.join(', ')].join(' · ');
+  }
+
+  const buildOutcomes = (selections) => Object.entries(selections)
+    .filter(([, v]) => v).map(([k, v]) => ({ line_id: Number(k), outcome: v }));
+
+  function validateCallLog(outcomes, callbackOn, todayIso) {
+    if (!outcomes.length) return 'Choose an outcome for at least one refresher.';
+    if (outcomes.some((o) => o.outcome === 'call_back') && !callbackOn) return 'Pick a call-back date.';
+    if (callbackOn && callbackOn < todayIso) return "The call-back date can't be in the past.";
+    return null;
+  }
+
+  return { PROFILE_URL, profileUrl, esc, sydneyToday, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
+           queueCards, myCards, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines, cardSummary,
+           buildOutcomes, validateCallLog, _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
 if (typeof module !== 'undefined') module.exports = RC;
 </script>
@@ -492,7 +578,8 @@ const $ = (id) => document.getElementById(id);
 const esc = RC.esc;
 
 const S = {
-  sb: null, me: null, cards: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
+  sb: null, me: null, cards: [], staff: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
+  cardData: null, cardNotice: null,
   filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, entering: false,
 };
 const today = () => RC.sydneyToday(new Date());
@@ -560,9 +647,14 @@ async function loadLastSync() {
   $('stale-text').textContent = msg || '';
   $('stale-banner').classList.toggle('hidden', !msg);
 }
+async function loadStaff() {
+  const { data, error } = await S.sb.from('staff').select('id, email, full_name, role, active').order('full_name');
+  if (error) throw error;
+  S.staff = data;
+}
 async function refresh() {
   try {
-    await Promise.all([loadCards(), loadLastSync()]);
+    await Promise.all([loadCards(), loadLastSync(), loadStaff()]);
   } catch (e) {
     toast(friendlyError(e));
   }
@@ -663,10 +755,234 @@ async function releaseCard(key) {
 }
 function openCard(key) {
   S.cardKey = key;
+  S.cardNotice = null;
   showPage('card');
-  if (typeof renderCard === 'function') renderCard(key);
-  else $('card-body').innerHTML = '<div class="loading">Loading…</div>';
+  renderCard(key);
 }
+
+// ---------- card view ----------
+const staffName = (id) => (S.staff.find((s) => s.id === id) || {}).full_name || 'A former team member';
+const chunks = (xs, n) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+async function fetchIn(table, columns, ids, order) {
+  const out = [];
+  for (const part of chunks(ids, 150)) {
+    out.push(...await fetchAll(table, columns, (q) => q.in('contact_id', part).order(order)));
+  }
+  return out;
+}
+async function renderCard(key) {
+  const body = $('card-body');
+  if (!S.cardData || S.cardData.card.card_key !== key) body.innerHTML = '<div class="loading">Loading the card…</div>';
+  try {
+    const cv = await S.sb.from('v_cards').select('*').eq('card_key', key).maybeSingle();
+    if (cv.error) throw cv.error;
+    if (!cv.data) { body.innerHTML = emptyState('🤷', 'That card no longer exists.'); return; }
+    const st = await S.sb.from('students').select('contact_id, full_name, org_name').eq('card_key', key);
+    if (st.error) throw st.error;
+    const ids = st.data.map((s) => s.contact_id);
+    const [lines, history, logs] = await Promise.all([
+      fetchIn('lines', '*', ids, 'id'),
+      fetchIn('course_history', 'contact_id, course_name, completed_on', ids, 'completed_on'),
+      fetchAll('call_logs', 'id, staff_id, called_at, notes, callback_on, line_outcomes(line_id, outcome)',
+        (q) => q.eq('card_key', key).order('called_at', { ascending: false })),
+    ]);
+    if (S.cardKey !== key) return;                        // the user moved on while this loaded
+    S.cardData = { card: cv.data, students: st.data, lines, history, logs };
+    drawCard();
+  } catch (e) {
+    body.innerHTML = errorBanner(friendlyError(e));
+  }
+}
+function outcomeSelect(line) {
+  const opts = RC.OUTCOMES.map((o) => `<option value="${esc(o.code)}">${esc(o.label)}</option>`).join('');
+  return `<select class="form-select line-outcome" data-line="${esc(line.id)}" data-open="${RC.isOpen(line) ? 1 : 0}"
+    aria-label="Outcome">${'<option value="">—</option>'}${opts}</select>`;
+}
+function drawCard() {
+  const { card, students, lines, history, logs } = S.cardData;
+  const t = today();
+  const groups = RC.groupLines(lines, students, t);
+  const mine = card.claimed_by === S.me.id;
+  const manager = S.me.role === 'manager';
+  const canLog = mine;
+  const lineById = new Map(lines.map((l) => [l.id, l]));
+  const nameById = new Map(students.map((s) => [s.contact_id, s.full_name]));
+  const histBy = new Map();
+  for (const h of history) { if (!histBy.has(h.contact_id)) histBy.set(h.contact_id, []); histBy.get(h.contact_id).push(h); }
+
+  const target = card.kind !== 'organisation' && card.target_contact_id
+    ? `<a href="${esc(RC.profileUrl(card.target_contact_id))}" target="_blank" rel="noopener">${esc(card.target_name)} →</a>`
+    : esc(card.target_name);
+  const siblings = RC.sortQueue(S.cards.filter((c) => card.org_key && c.org_key === card.org_key
+    && c.card_key !== card.card_key && c.open_lines > 0));
+  const siblingHtml = siblings.length ? `<div class="hero-line">${siblings.length} other booker${siblings.length === 1 ? '' : 's'} at this organisation:
+    ${siblings.map((c) => `<button class="link-btn" style="font-size:0.8rem" data-act="open" data-key="${esc(c.card_key)}">${esc(c.target_name)} →</button>
+      <span class="muted">(${c.claimed_by ? `taken by ${esc(c.claimed_by_name || 'someone')}` : 'in the queue'})</span>`).join(' · ')}</div>` : '';
+  const owner = card.claimed_by ? (mine ? '🙋 Taken by you' : `🔒 Taken by ${esc(card.claimed_by_name || staffName(card.claimed_by))}`) : '📞 In the queue';
+  const tentative = lines.some((l) => l.tentative && RC.isOpen(l)) ? ' <span class="badge badge-warning">🟡 Tentative booking</span>' : '';
+
+  const rows = groups.map((g) => g.rows.map((r, i) => {
+    const due = RC.dueLabel(r.due_date, t);
+    const [badgeClass, badgeText] = RC.STATUS_BADGE[r.status] || ['badge-neutral', r.status];
+    const student = i === 0
+      ? `<a href="${esc(RC.profileUrl(g.contact_id))}" target="_blank" rel="noopener" class="cell-name">${esc(g.full_name)} →</a>
+         <button class="link-btn" data-act="toggle-hist" data-cid="${esc(g.contact_id)}">Courses ▸</button>`
+      : (g.dueForBoth && RC.isOpen(r) ? '<span class="badge badge-purple">Due for both</span>' : '');
+    const hint = r.refresher_type === 'HSR' && r.attendance_confirmed === false ? '<span class="line-hint">attendance not confirmed</span>' : '';
+    const tent = r.tentative && RC.isOpen(r) ? '<span class="line-hint">🟡 tentative booking</span>' : '';
+    const last = r.outcome && r.status !== 'not_called' ? `<span class="line-hint">${esc(RC.outcomeLabel(r.outcome))}</span>` : '';
+    const window = r.in_window === false ? '<span class="line-hint">Out of window</span>' : '';
+    let action = '';
+    if (r.status === 'won') action = `Booked for ${esc(r.won_class_date ? RC.fmtDate(r.won_class_date) : 'a class')}`;
+    else if (canLog && r.in_window !== false) action = outcomeSelect(r);
+    return `<tr>
+      <td>${student}</td>
+      <td>${esc(r.refresher_type)}${hint}${tent}</td>
+      <td>${esc(RC.fmtMonth(r.last_done))}</td>
+      <td><span class="badge ${due.overdue ? 'badge-danger' : 'badge-neutral'}">${esc(due.text)}</span></td>
+      <td><span class="badge ${badgeClass}">${esc(badgeText)}</span>${last}${window}</td>
+      <td>${action}</td></tr>`;
+  }).join('') + `<tr class="hist-row hidden" data-hist="${esc(g.contact_id)}"><td colspan="6">${
+    (histBy.get(g.contact_id) || []).slice().sort((a, b) => (a.completed_on < b.completed_on ? 1 : -1))
+      .map((h) => `${esc(h.course_name)} <span class="muted">${esc(RC.fmtDate(h.completed_on))}</span>`).join('<br>')
+    || '<span class="muted">No other Kallibr courses on record.</span>'}</td></tr>`).join('');
+
+  let form;
+  if (canLog) {
+    const opts = RC.OUTCOMES.map((o) => `<option value="${esc(o.code)}">${esc(o.label)}</option>`).join('');
+    form = `<div class="card">
+      <div class="section-title">📝 Log this call</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label" for="apply-all">Apply one outcome to all</label>
+          <select class="form-select" id="apply-all"><option value="">Choose…</option>${opts}</select>
+          <div class="form-hint">Fills every open refresher; you can still change single rows before saving.</div></div>
+        <div class="form-group"><label class="form-label" for="cb-date">Call back on</label>
+          <input class="form-input" type="date" id="cb-date" min="${esc(t)}"></div>
+      </div>
+      <div class="form-group"><label class="form-label" for="call-notes">Notes</label>
+        <textarea class="form-textarea" id="call-notes" placeholder="Who you spoke to and what they said…"></textarea></div>
+      <div id="save-msg"></div>
+      <div class="tools-row"><button class="btn-primary" data-act="save-call" id="save-call">Save Call Log</button>
+        <button class="btn-ghost" data-act="release" data-key="${esc(card.card_key)}">Release card</button></div>
+    </div>`;
+  } else if (card.claimed_by) {
+    form = `<div class="card"><div class="tools-row"><span style="font-weight:600">🔒 Taken by ${esc(card.claimed_by_name || staffName(card.claimed_by))}</span>
+      ${manager ? `<button class="btn-ghost btn-sm" data-act="release" data-key="${esc(card.card_key)}">Release card</button>` : ''}</div></div>`;
+  } else if (card.do_not_call) {
+    form = '';
+  } else if (card.open_lines > 0) {
+    form = `<div class="card"><div class="tools-row"><span>Nobody has this card yet.</span>
+      <button class="btn-primary" data-act="take" data-key="${esc(card.card_key)}">Take</button></div></div>`;
+  } else {
+    form = '<div class="card"><div class="tools-row"><span class="muted">Every refresher on this card is finished.</span></div></div>';
+  }
+
+  const tools = manager ? `<div class="card"><div class="section-title">⚙️ Manager</div><div class="tools-row">
+      <select class="form-select" id="assign-to" style="width:auto;min-width:220px" aria-label="Assign to">
+        <option value="">Nobody (back to the queue)</option>
+        ${S.staff.filter((s) => s.active).map((s) => `<option value="${esc(s.id)}" ${s.id === card.claimed_by ? 'selected' : ''}>${esc(s.full_name)}</option>`).join('')}
+      </select>
+      <button class="btn-ghost" data-act="assign">Assign to…</button>
+      ${card.do_not_call ? '<button class="btn-danger" data-act="clear-dnc">Clear do not call</button>' : ''}
+    </div></div>` : '';
+
+  const historyHtml = logs.length ? logs.map((log) => `<div class="log-item">
+      <div class="log-top"><span class="log-title">${esc(staffName(log.staff_id))}</span><span class="log-date">${esc(RC.fmtDateTime(log.called_at))}</span></div>
+      ${log.notes ? `<div class="log-notes">${esc(log.notes)}</div>` : ''}
+      <div class="log-outcomes">${(log.line_outcomes || []).map((o) => {
+        const l = lineById.get(o.line_id);
+        const who = l ? `${nameById.get(l.contact_id) || ''} · ${l.refresher_type}` : 'Refresher';
+        const status = (RC.OUTCOMES.find((x) => x.code === o.outcome) || {}).status;
+        return `<span class="badge ${status === 'lost' ? 'badge-danger' : 'badge-warning'}">${esc(who)}: ${esc(RC.outcomeLabel(o.outcome))}</span>`;
+      }).join('')}${log.callback_on ? `<span class="badge badge-info">Call back ${esc(RC.fmtDate(log.callback_on))}</span>` : ''}</div>
+    </div>`).join('') : '<div class="muted" style="font-size:0.82rem">No calls logged yet.</div>';
+
+  $('card-body').innerHTML = `
+    <div class="hero">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+        <div><h2>${target}</h2><div class="hero-sub">${card.org_name ? esc(card.org_name) + ' · ' : ''}${esc(KIND_LABEL[card.kind] || '')}</div></div>
+        <div>${stateTags(card.locations)}</div>
+      </div>
+      <div class="hero-summary">${esc(RC.cardSummary(groups, t))}${tentative}</div>
+      ${siblingHtml}
+      <div class="hero-line">${owner}${card.callback_on ? ` · call back ${esc(RC.fmtDate(card.callback_on))}` : ''}</div>
+    </div>
+    ${S.cardNotice ? `<div class="banner banner-info"><div class="banner-title">ℹ️ ${esc(S.cardNotice)}</div></div>` : ''}
+    ${card.do_not_call ? `<div class="banner banner-danger"><div class="banner-title">🚫 Do not call</div><div class="banner-sub">This card is marked do not call. Its open refreshers were closed and new ones are closed automatically.${manager ? ' Use Clear do not call below to undo this.' : ''}</div></div>` : ''}
+    <div class="table-wrap" style="margin-bottom:20px"><div class="table-scroll"><table class="table">
+      <thead><tr><th>Student</th><th>Refresher</th><th>Last done</th><th>Due</th><th>Status</th><th>Outcome</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="muted">No refreshers on this card.</td></tr>'}</tbody>
+    </table></div></div>
+    ${form}
+    ${tools}
+    <div class="card"><div class="section-title">📅 History</div>${historyHtml}</div>`;
+}
+function showSaveMsg(kind, text) {
+  const box = $('save-msg');
+  if (!box) return;
+  box.innerHTML = text ? `<div class="banner banner-${kind}"><div class="banner-title">${esc(text)}</div></div>` : '';
+}
+async function saveCall(dncCard) {
+  const key = S.cardKey;
+  const selections = {};
+  document.querySelectorAll('.line-outcome').forEach((s) => { selections[s.dataset.line] = s.value; });
+  const outcomes = RC.buildOutcomes(selections);
+  const callbackOn = $('cb-date').value || null;
+  const problem = RC.validateCallLog(outcomes, callbackOn, today());
+  if (problem) { showSaveMsg('danger', problem); return; }
+  if (dncCard === undefined && outcomes.some((o) => o.outcome === 'do_not_call')) {
+    $('dnc-modal').classList.add('open');
+    return;
+  }
+  showSaveMsg('', '');
+  $('save-call').disabled = true;
+  const { data, error } = await S.sb.rpc('save_call_log', {
+    p_card_key: key, p_notes: $('call-notes').value.trim() || null, p_callback_on: callbackOn,
+    p_outcomes: outcomes, p_dnc_card: !!dncCard,
+  });
+  if (error) {
+    $('save-call').disabled = false;
+    showSaveMsg('danger', `Couldn't save: ${friendlyError(error)} Everything you entered is still here.`);
+    return;
+  }
+  const skipped = (data && data.skipped_line_ids) || [];
+  toast('Call log saved ✓');
+  await renderCard(key);
+  S.cardNotice = skipped.length
+    ? `${skipped.length} refresher${skipped.length === 1 ? ' was' : 's were'} booked since you opened this card, so ${skipped.length === 1 ? 'it stays' : 'they stay'} as Won.`
+    : null;
+  if (S.cardNotice) drawCard();
+  loadCards().catch(() => {});
+}
+async function cardRpc(fn, params, done) {
+  const { error } = await S.sb.rpc(fn, params);
+  if (error) { toast(friendlyError(error)); return; }
+  toast(done);
+  await loadCards().catch(() => {});
+  renderCard(S.cardKey);
+}
+function onAction(act, btn) {
+  switch (act) {
+    case 'save-call': saveCall(); break;
+    case 'dnc-yes': $('dnc-modal').classList.remove('open'); saveCall(true); break;
+    case 'dnc-no': $('dnc-modal').classList.remove('open'); saveCall(false); break;
+    case 'dnc-cancel': $('dnc-modal').classList.remove('open'); break;
+    case 'toggle-hist': {
+      const row = document.querySelector(`tr[data-hist="${CSS.escape(btn.dataset.cid)}"]`);
+      if (row) { row.classList.toggle('hidden'); btn.textContent = row.classList.contains('hidden') ? 'Courses ▸' : 'Courses ▾'; }
+      break;
+    }
+    case 'assign': cardRpc('assign_card', { p_card_key: S.cardKey, p_staff_id: $('assign-to').value || null }, 'Card assigned ✓'); break;
+    case 'clear-dnc': cardRpc('clear_do_not_call', { p_card_key: S.cardKey }, 'Do not call cleared ✓'); break;
+    default: if (typeof onMoreAction === 'function') onMoreAction(act, btn);
+  }
+}
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'apply-all' && e.target.value) {
+    document.querySelectorAll('.line-outcome[data-open="1"]').forEach((s) => { s.value = e.target.value; });
+  }
+});
+$('dnc-modal').addEventListener('click', (e) => { if (e.target.id === 'dnc-modal') $('dnc-modal').classList.remove('open'); });
 
 // ---------- sign-in ----------
 async function sendLink(ev) {

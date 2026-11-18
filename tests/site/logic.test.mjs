@@ -98,3 +98,67 @@ test('staleBanner only after 36 hours', () => {
   assert.match(msg, /16 Nov 2026/);
   assert.match(RC.staleBanner(null, now), /not been updated/);
 });
+
+// ---------- Task 10: card view ----------
+const T = '2026-11-18';
+const L = (id, contact_id, refresher_type, due_date, status = 'not_called', extra = {}) =>
+  ({ id, contact_id, refresher_type, due_date, status, in_window: true, last_done: '2024-01-01', ...extra });
+const LINES = [L(13, 2, 'Heights', '2027-01-10'), L(12, 1, 'Heights', '2026-03-07'), L(11, 1, 'Confined Space', '2026-02-05', 'pending'),
+               L(14, 3, 'Heights', '2025-12-01', 'won')];
+const STUDENTS = [{ contact_id: 1, full_name: 'Sam Lee' }, { contact_id: 2, full_name: 'Kim Tran' },
+                  { contact_id: 3, full_name: 'Ali Khan' }, { contact_id: 4, full_name: 'No Lines' }];
+
+test('groupLines sorts and flags due-for-both', () => {
+  // student 1: Confined Space due 2026-02-05 (open) + Heights due 2026-03-07 (open); student 2: Heights due 2027-01-10 (open); student 3: Heights won
+  const g = RC.groupLines(LINES, STUDENTS, T);
+  assert.deepEqual(plain(g.map((x) => [x.contact_id, x.dueForBoth, x.rows.length])), [[1, true, 2], [2, false, 1], [3, false, 1]]);
+  assert.deepEqual(plain(g[0].rows.map((r) => r.id)), [11, 12]);
+  assert.equal(g[0].full_name, 'Sam Lee');
+});
+
+test('a second line that is already lost does not count as due-for-both', () => {
+  const g = RC.groupLines([L(1, 1, 'Heights', '2026-03-07'), L(2, 1, 'Confined Space', '2026-02-05', 'lost')], STUDENTS, T);
+  assert.equal(g[0].dueForBoth, false);
+});
+
+test('an out-of-window line is not open', () => {
+  const g = RC.groupLines([L(1, 1, 'Heights', '2026-03-07'), L(2, 1, 'HSR', '2024-01-01', 'not_called', { in_window: false })], STUDENTS, T);
+  assert.equal(g[0].dueForBoth, false);
+  assert.equal(RC.isOpen(L(2, 1, 'HSR', '2024-01-01', 'not_called', { in_window: false })), false);
+});
+
+test('cardSummary', () => {
+  assert.equal(RC.cardSummary(RC.groupLines(LINES, STUDENTS, T), T), '2 students · 3 refreshers · 2 overdue, 1 due by Jan 2027');
+  assert.equal(RC.cardSummary(RC.groupLines([L(1, 1, 'Heights', '2027-03-07')], STUDENTS, T), T), '1 student · 1 refresher · 1 due by Mar 2027');
+  assert.equal(RC.cardSummary(RC.groupLines([L(1, 1, 'Heights', '2026-03-07'), L(2, 1, 'HSR', '2026-04-01')], STUDENTS, T), T),
+    '1 student · 2 refreshers · 2 overdue');
+  assert.equal(RC.cardSummary(RC.groupLines([L(1, 1, 'Heights', '2026-03-07', 'won')], STUDENTS, T), T), 'No open refreshers');
+});
+
+test('buildOutcomes drops blanks', () => {
+  assert.deepEqual(plain(RC.buildOutcomes({ 11: 'will_book', 12: '' })), [{ line_id: 11, outcome: 'will_book' }]);
+  assert.deepEqual(plain(RC.buildOutcomes({ 3: null, 4: 'no_answer', 5: undefined })), [{ line_id: 4, outcome: 'no_answer' }]);
+});
+
+test('validateCallLog', () => {
+  assert.equal(RC.validateCallLog([], null, T), 'Choose an outcome for at least one refresher.');
+  assert.equal(RC.validateCallLog([{ line_id: 1, outcome: 'call_back' }], null, T), 'Pick a call-back date.');
+  assert.equal(RC.validateCallLog([{ line_id: 1, outcome: 'call_back' }], '2026-11-17', T), "The call-back date can't be in the past.");
+  assert.equal(RC.validateCallLog([{ line_id: 1, outcome: 'will_book' }], null, T), null);
+  assert.equal(RC.validateCallLog([{ line_id: 1, outcome: 'call_back' }], T, T), null);
+  assert.equal(RC.validateCallLog([{ line_id: 1, outcome: 'info_sent' }], '2026-11-01', T), "The call-back date can't be in the past.");
+});
+
+test('every outcome maps to pending or lost, never won', () => {
+  assert.ok(RC.OUTCOMES.every((o) => ['pending', 'lost'].includes(o.status)));
+  assert.deepEqual(plain(RC.OUTCOMES.map((o) => o.code)),
+    ['no_answer', 'call_back', 'info_sent', 'will_book', 'not_needed', 'went_elsewhere', 'left_company', 'do_not_call']);
+  assert.equal(RC.outcomeLabel('left_company'), 'Left the company');
+  assert.deepEqual(plain(RC.STATUS_BADGE.won), ['badge-success', '🟢 Won']);
+});
+
+test('fmtDateTime is Sydney time', () => {
+  assert.equal(RC.fmtDateTime('2026-11-19T22:30:00Z'), '20 Nov 2026, 9:30 am');
+  assert.equal(RC.fmtDateTime('2026-06-30T04:05:00Z'), '30 Jun 2026, 2:05 pm');
+  assert.equal(RC.fmtDateTime('2026-11-18T13:00:00Z'), '19 Nov 2026, 12:00 am');
+});
