@@ -112,7 +112,7 @@ def run(con: sqlite3.Connection, client, today: date, now: datetime, dry_run: bo
 
     # 2. Lines and cards.
     lines = build_lines(con, today)
-    placed = place_students(con, lines, ignore_ids=config.IGNORE_BOOKER_CONTACT_IDS)
+    placed = place_students(con, lines, ignore_ids=config.IGNORE_BOOKER_CONTACT_IDS, today=today)
 
     # 3. Safety stop: the list shrank too much.
     previous = _previous_ok_size(client)

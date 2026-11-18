@@ -255,3 +255,13 @@ def test_dry_run_shows_a_mass_reversal_without_writing(con):
     set_synced(con, NOW); students(con, 1)
     out = run(con, fake, TODAY, NOW, dry_run=True)
     assert out["result"] == "aborted" and fake.writes == []
+
+
+def test_push_places_students_with_the_current_booker(con, fake):
+    set_synced(con, NOW)
+    comp(con, 1, 100889, "2024-06-10")
+    book(con, 1, 100889, "2024-06-10", booker=900, booker_name="Kim Spicer", booked_on="2024-05-01")
+    book(con, 50, 555, "2026-10-20", booker=901, booker_name="Therese Stapleton", booked_on="2026-10-01")
+    run(con, fake, TODAY, NOW)
+    [s] = fake.inserted("stage_students")
+    assert (s["card_key"], s["target_name"]) == ("B:901", "Therese Stapleton")

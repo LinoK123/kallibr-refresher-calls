@@ -1,7 +1,7 @@
 """Pure refresher rules (spec sections 5.2, 5.3, 5.5). Reads the local SQLite database only."""
 import calendar
 import sqlite3
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date
 
@@ -160,9 +160,45 @@ def _requesters(con) -> dict[int, tuple[int, str]]:
     return out
 
 
+def _current_bookers(con, today: date, staff: set[str], ignore: set[int]):
+    """Who books for each company now: requesters of real bookings (any course) made in the last
+    CURRENT_BOOKER_MONTHS, judged on the booked date (or the class date when there is none).
+    Returns (counts by (org_key, state), counts by org_key, active (org_key, who) pairs,
+    latest booking date by (scope, who), latest name by who)."""
+    since = add_months(today, -config.CURRENT_BOOKER_MONTHS)
+    requesters = _requesters(con)
+    by_state, by_org = defaultdict(Counter), defaultdict(Counter)
+    latest, names, name_at, active, seen = {}, {}, {}, set(), set()
+    rows = con.execute("select booking_id, contact_id, organisation, location, start_date, booked_on, counted from v_bookings")
+    for bid, cid, org, loc, start, booked_on, counted in rows:
+        if counted != 1 or bid in seen:
+            continue
+        seen.add(bid)
+        when = _d(booked_on) or _d(start)
+        _, org_key = _org(org)
+        req = requesters.get(bid)
+        if when is None or when < since or not org_key or req is None:
+            continue
+        who, name = req
+        if who == cid or who in ignore or (_norm(name) and _norm(name) in staff):
+            continue
+        active.add((org_key, who))
+        by_state[(org_key, loc)][who] += 1
+        by_org[org_key][who] += 1
+        for scope in ((org_key, loc), (org_key, None)):
+            if (scope, who) not in latest or when > latest[(scope, who)]:
+                latest[(scope, who)] = when
+        if who not in name_at or when >= name_at[who]:
+            name_at[who], names[who] = when, name
+    return by_state, by_org, active, latest, names
+
+
 def place_students(con: sqlite3.Connection, lines: list[Line],
-                   ignore_ids: tuple[int, ...] = ()) -> dict[int, Placement]:
-    """Choose one card per student (spec 5.3). Keyed by student contact ID."""
+                   ignore_ids: tuple[int, ...] = (), today: date | None = None) -> dict[int, Placement]:
+    """Choose one card per student (spec 5.3). Keyed by student contact ID.
+
+    With `today`, a student whose booker has gone quiet for their company (or who has no booker)
+    goes to the company's current booker for their state (current-booker design, 18 Nov 2026)."""
     latest: dict[int, Line] = {}
     for l in lines:
         cur = latest.get(l.contact_id)
@@ -200,6 +236,29 @@ def place_students(con: sqlite3.Connection, lines: list[Line],
             placed[cid] = Placement(cid, f"O:{org_key}", "organisation", None, org_name, org_name, org_key)
         else:
             placed[cid] = Placement(cid, f"S:{cid}", "individual", cid, l.student_name, org_name, org_key)
+
+    # Current booking contact: replace a quiet booker (or an organisation card) with whoever books
+    # for the company now in the student's state, else the company's busiest current booker.
+    if today is not None:
+        by_state, by_org, active, latest_when, names = _current_bookers(con, today, staff, ignore)
+
+        def pick(counter, scope):
+            if not counter:
+                return None
+            return min(counter, key=lambda w: (-counter[w], -latest_when[(scope, w)].toordinal(), w))
+
+        for cid, p in list(placed.items()):
+            if p.kind == "individual" or not p.org_key:
+                continue
+            if p.kind == "booker" and (p.org_key, p.target_contact_id) in active:
+                continue
+            state = latest[cid].location
+            who = pick(by_state.get((p.org_key, state)), (p.org_key, state))
+            if who is None:
+                who = pick(by_org.get(p.org_key), (p.org_key, None))
+            if who is not None:
+                placed[cid] = Placement(cid, f"B:{who}", "booker", who, names.get(who) or f"Contact {who}",
+                                        p.org_name, p.org_key)
 
     # One person, one card: a student who also books for others goes on their own booker card.
     bookers = {p.target_contact_id for p in placed.values() if p.kind == "booker"}
