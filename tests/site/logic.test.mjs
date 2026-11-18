@@ -217,3 +217,23 @@ test('skippedNotice names each refresher that was booked meanwhile', () => {
   assert.equal(RC.skippedNotice([11, 12], lines, STUDENTS),
     'These were booked since you opened this card, so they stay as Won: Sam Lee · Heights; Kim Tran · HSR.');
 });
+
+// ---------- Sign-in by code (email scanners use up one-time links) ----------
+test('cleanCode keeps digits and accepts 6 to 10 of them', () => {
+  assert.equal(RC.cleanCode(' 123 456 '), '123456');
+  assert.equal(RC.cleanCode('12-34-56-78'), '12345678');
+  assert.equal(RC.cleanCode('12345'), null);
+  assert.equal(RC.cleanCode('12345678901'), null);
+  assert.equal(RC.cleanCode(''), null);
+  assert.equal(RC.cleanCode(null), null);
+});
+
+test('authLinkError explains an expired or used link, and ignores normal pages', () => {
+  const expired = RC.authLinkError('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired&sb=');
+  assert.match(expired, /expired or was already used/);
+  assert.match(expired, /code/);
+  assert.equal(RC.authLinkError('#error=server_error&error_description=Database+error+saving+new+user'),
+    "That sign-in didn't work: Database error saving new user");
+  assert.equal(RC.authLinkError(''), null);
+  assert.equal(RC.authLinkError('#access_token=abc&type=magiclink'), null);
+});

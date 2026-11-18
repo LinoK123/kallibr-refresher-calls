@@ -18,7 +18,7 @@ A shared call list for Kallibr staff to ring bookers about overdue and upcoming 
 
 1. **Admin page → + Add team member:** name, Kallibr email, role (Staff or Manager), Active ticked.
 2. **Supabase → Authentication → Users → Add user → Send invitation**, with the same email. Sign-ups are switched off, so this is the only way in.
-3. They open the invitation email, which signs them in. Next time they enter their email on the site and click **Email me a sign-in link**.
+3. They go to the site, enter their work email, click **Email me a sign-in code**, and type the code from the email. The invitation email only points them to the site. Sign-in uses typed codes rather than links because Microsoft 365's email security scanners open links in incoming mail, which uses up one-time sign-in links before the person clicks (seen at go-live).
 
 To remove someone, open **Admin → Edit**, untick **Active** and save. Their cards go straight back to the queue and they see nothing on their next request. You can also delete their user under Authentication → Users. You can't remove your own manager access, so another manager has to do that.
 
@@ -35,6 +35,27 @@ To set up or replace the Gmail sender:
    - password: the app password
 
 If the app password is ever exposed, revoke it in the Google account and create a new one.
+
+### Email templates (Supabase → Authentication → Emails → Templates)
+
+The emails must carry a **code** (`{{ .Token }}`), never `{{ .ConfirmationURL }}`. A scanner that opens a link would use up the code too, because it is the same one-time token.
+
+- **Magic Link** and **Confirm signup**, both with the subject `Your Refresher Calls sign-in code` and this body:
+
+  ```html
+  <h2>Refresher Calls</h2>
+  <p>Your sign-in code is:</p>
+  <p style="font-size:26px;font-weight:bold;letter-spacing:4px">{{ .Token }}</p>
+  <p>Type it on the sign-in page. It works once, for one hour. If you didn't ask for it, you can ignore this email.</p>
+  ```
+
+- **Invite user**, with the subject `You've been added to Kallibr Refresher Calls` and this body:
+
+  ```html
+  <h2>Refresher Calls</h2>
+  <p>You've been added to Kallibr's refresher call list.</p>
+  <p>To sign in, go to <a href="{{ .SiteURL }}">{{ .SiteURL }}</a>, enter this email address and click <b>Email me a sign-in code</b>.</p>
+  ```
 
 ## Supabase settings that must stay as they are
 

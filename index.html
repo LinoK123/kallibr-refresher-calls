@@ -319,7 +319,17 @@ a:hover{text-decoration:underline;}
         <label class="form-label" for="signin-email">Work email</label>
         <input class="form-input" id="signin-email" type="email" autocomplete="email" required placeholder="you@kallibr.com.au">
       </div>
-      <button class="btn-primary" type="submit" id="signin-btn">Email me a sign-in link</button>
+      <button class="btn-primary" type="submit" id="signin-btn">Email me a sign-in code</button>
+    </form>
+    <form id="code-form" class="hidden" style="margin-top:16px">
+      <div class="form-group">
+        <label class="form-label" for="signin-code">Code from the email</label>
+        <input class="form-input" id="signin-code" inputmode="numeric" autocomplete="one-time-code" maxlength="14" placeholder="123456">
+      </div>
+      <div class="tools-row">
+        <button class="btn-primary" type="submit" id="code-btn">Sign in</button>
+        <button class="btn-ghost" type="button" data-act="signin-restart">Use a different email</button>
+      </div>
     </form>
     <div id="signin-msg" class="form-hint" style="margin-top:12px"></div>
   </div>
@@ -656,7 +666,33 @@ const RC = (() => {
   }
   const fmtRate = (x) => (x === null || x === undefined || x === '' ? '–' : `${Math.round(Number(x) * 100)}%`);
 
-  return { PROFILE_URL, profileUrl, esc, sydneyToday, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
+  // ---- sign-in ----
+  // A sign-in code typed by the person (email scanners open links, which uses one-time links up).
+  const cleanCode = (value) => {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    return digits.length >= 6 && digits.length <= 10 ? digits : null;
+  };
+  function parseHash(hash) {
+    const out = {};
+    for (const part of String(hash || '').replace(/^#/, '').split('&')) {
+      if (!part) continue;
+      const i = part.indexOf('=');
+      const key = i < 0 ? part : part.slice(0, i), raw = i < 0 ? '' : part.slice(i + 1).replace(/\+/g, ' ');
+      try { out[decodeURIComponent(key)] = decodeURIComponent(raw); } catch (e) { out[key] = raw; }
+    }
+    return out;
+  }
+  function authLinkError(hash) {
+    const p = parseHash(hash);
+    if (!p.error && !p.error_code) return null;
+    if (p.error_code === 'otp_expired') {
+      return 'That sign-in link has expired or was already used (email security scanners sometimes open links before you do). '
+        + 'Ask for a sign-in code below and type it in instead.';
+    }
+    return `That sign-in didn't work: ${p.error_description || p.error_code || p.error}`;
+  }
+
+  return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
            queueCards, myCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
@@ -1253,7 +1289,7 @@ document.addEventListener('change', (e) => {
 $('dnc-modal').addEventListener('click', (e) => { if (e.target.id === 'dnc-modal') $('dnc-modal').classList.remove('open'); });
 
 // ---------- sign-in ----------
-async function sendLink(ev) {
+async function sendCode(ev) {
   ev.preventDefault();
   const email = $('signin-email').value.trim().toLowerCase();
   const msg = $('signin-msg');
@@ -1267,10 +1303,39 @@ async function sendLink(ev) {
   if (error) {
     msg.textContent = /signup|not allowed|not found/i.test(error.message)
       ? "That email isn't set up for this tool. Ask your manager."
-      : `Couldn't send the link: ${error.message}`;
+      : `Couldn't send the code: ${error.message}`;
     return;
   }
-  msg.textContent = `Check your email: we've sent a sign-in link to ${email}.`;
+  S.signinEmail = email;
+  $('signin-form').classList.add('hidden');
+  $('code-form').classList.remove('hidden');
+  $('signin-code').value = '';
+  $('signin-code').focus();
+  msg.textContent = `We've emailed a sign-in code to ${email}. It works once, for one hour. Check Junk if it isn't in your Inbox.`;
+}
+async function verifyCode(ev) {
+  ev.preventDefault();
+  const msg = $('signin-msg');
+  const code = RC.cleanCode($('signin-code').value);
+  if (!code) { msg.textContent = 'Type the code from the email (6 digits).'; return; }
+  $('code-btn').disabled = true;
+  msg.textContent = 'Checking…';
+  const { error } = await S.sb.auth.verifyOtp({ email: S.signinEmail, token: code, type: 'email' });
+  $('code-btn').disabled = false;
+  if (error) {
+    msg.textContent = /expired|invalid/i.test(error.message)
+      ? "That code has expired, was already used, or doesn't match. Use the newest email, or ask for a new code."
+      : `Couldn't sign in: ${error.message}`;
+    return;
+  }
+  msg.textContent = 'Signed in ✓';                       // onAuthStateChange takes it from here
+}
+function restartSignIn() {
+  S.signinEmail = null;
+  $('code-form').classList.add('hidden');
+  $('signin-form').classList.remove('hidden');
+  $('signin-msg').textContent = '';
+  $('signin-email').focus();
 }
 async function enter(session) {
   if (S.entering || (S.me && session)) return;
@@ -1318,12 +1383,18 @@ document.addEventListener('click', (e) => {
     case 'back': showPage(S.prevPage); refresh(); break;
     case 'page': S.queuePage = Math.max(0, +btn.dataset.page); renderQueue(); break;
     case 'signout': signOut(); break;
+    case 'signin-restart': restartSignIn(); break;
     default: if (typeof onAction === 'function') onAction(btn.dataset.act, btn, e);
   }
 });
 $('f-kind').addEventListener('change', (e) => { S.filters.kind = e.target.value; S.queuePage = 0; renderQueue(); });
 $('f-search').addEventListener('input', (e) => { S.filters.search = e.target.value; S.queuePage = 0; renderQueue(); });
-$('signin-form').addEventListener('submit', sendLink);
+$('signin-form').addEventListener('submit', sendCode);
+$('code-form').addEventListener('submit', verifyCode);
+
+// A failed email link comes back as #error=...; read it before supabase-js handles the address.
+const LINK_ERROR = RC.authLinkError(location.hash);
+if (LINK_ERROR) history.replaceState(null, '', location.pathname + location.search);
 
 (async function init() {
   if (!SUPABASE_KEY || !window.supabase) {
@@ -1338,7 +1409,10 @@ $('signin-form').addEventListener('submit', sendLink);
     if (event === 'SIGNED_OUT') { S.me = null; showOnly('signin'); }
   });
   const { data } = await S.sb.auth.getSession();
-  if (!data.session) showOnly('signin');
+  if (!data.session) {
+    showOnly('signin');
+    if (LINK_ERROR) $('signin-msg').textContent = LINK_ERROR;
+  }
 })();
 </script>
 </body>
