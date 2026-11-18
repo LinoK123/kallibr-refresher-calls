@@ -423,3 +423,17 @@ test('emailTable: open refreshers only, five columns with a blank Date to book, 
   assert.equal((t.html.match(/<tr/g) || []).length, 3);              // header + 2 refreshers
   assert.equal(RC.emailTable([]).count, 0);
 });
+
+test('pageOf: 25 a page, the page kept in range, and the row numbers shown', () => {
+  const list = Array.from({ length: 173 }, (_, i) => i + 1);
+  const p = RC.pageOf(list, 2);
+  assert.deepEqual(plain(p.rows), list.slice(50, 75));
+  assert.deepEqual([p.page, p.pages, p.from, p.to, p.total], [2, 7, 51, 75, 173]);
+  const last = RC.pageOf(list, 6);
+  assert.deepEqual([last.rows.length, last.from, last.to], [23, 151, 173]);
+  assert.equal(RC.pageOf(list, 99).page, 6);                 // past the end (e.g. after a filter): the last page
+  assert.equal(RC.pageOf(list, -3).page, 0);
+  const none = RC.pageOf([], 4);
+  assert.deepEqual([none.rows.length, none.page, none.pages, none.from, none.to], [0, 0, 1, 0, 0]);
+  assert.equal(RC.pageOf(list, 0, 100).pages, 2);           // page size can be given
+});

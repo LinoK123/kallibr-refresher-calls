@@ -932,11 +932,19 @@ const RC = (() => {
     return `Couldn't send the code: ${message}`;
   }
 
+  // One page of a list, plus the numbers the pager shows. The page is kept in range (a filter can shrink the list).
+  const pageOf = (list, page, size = 25) => {
+    const total = list.length, pages = Math.max(1, Math.ceil(total / size));
+    const p = Math.min(Math.max(0, Math.floor(+page || 0)), pages - 1);
+    return { rows: list.slice(p * size, (p + 1) * size), page: p, pages, total,
+             from: total ? p * size + 1 : 0, to: Math.min(total, (p + 1) * size) };
+  };
+
   return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, signInError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
            queueCards, assignedCards, myCards, heldCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary, emailTable,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
-           weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort, callbackList, fmtWeekday,
+           weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort, callbackList, fmtWeekday, pageOf,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
 if (typeof module !== 'undefined') module.exports = RC;
@@ -956,7 +964,7 @@ const esc = RC.esc;
 const S = {
   sb: null, me: null, cards: [], staff: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
   cardData: null, cardNotice: null, cardView: null,
-  filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, queueSort: { key: null, dir: null }, mineSort: { key: null, dir: null },
+  filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, queueSort: { key: null, dir: null }, mineSort: { key: null, dir: null }, minePage: 0,
   mineFilters: { state: '', type: '', due: '', kind: '', search: '' }, queueWho: 'none', mineWho: null,
   entering: false,
 };
@@ -1078,13 +1086,13 @@ function cardTable(rows, pager, sort, act = 'queue-sort') {
     <thead><tr>${head}<th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>${pager || ''}</div>`;
 }
-function pager(total, page) {
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const from = total ? page * PAGE_SIZE + 1 : 0, to = Math.min(total, (page + 1) * PAGE_SIZE);
+// pg: an RC.pageOf result; act: the click action ('page' for the Queue, 'mine-page' for My cards)
+function pager(pg, act = 'page') {
+  const { page, pages, from, to, total } = pg;
   return `<div class="pagination"><span>${from}–${to} of ${total}</span><div class="pg-btns">
-    <button class="pg-btn" data-act="page" data-page="${page - 1}" ${page <= 0 ? 'disabled' : ''} aria-label="Previous page">‹</button>
+    <button class="pg-btn" data-act="${act}" data-page="${page - 1}" ${page <= 0 ? 'disabled' : ''} aria-label="Previous page">‹</button>
     <button class="pg-btn active" disabled>${page + 1} / ${pages}</button>
-    <button class="pg-btn" data-act="page" data-page="${page + 1}" ${page >= pages - 1 ? 'disabled' : ''} aria-label="Next page">›</button>
+    <button class="pg-btn" data-act="${act}" data-page="${page + 1}" ${page >= pages - 1 ? 'disabled' : ''} aria-label="Next page">›</button>
   </div></div>`;
 }
 function renderQueue() {
@@ -1099,8 +1107,6 @@ function renderQueue() {
     : who === 'all' ? 'Every card with refreshers to call, taken or not' : `Cards ${staffName(who)} holds`;
   const all = RC.assignedCards(S.cards, who);
   const list = RC.sortCards(RC.filterCards(all, S.filters), S.queueSort.key, S.queueSort.dir);
-  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-  S.queuePage = Math.min(S.queuePage, pages - 1);
   $('queue-count').textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
   $('queue-clear').classList.toggle('hidden', !Object.values(S.filters).some(Boolean));
   document.querySelectorAll('#queue-filters .pill').forEach((p) =>
@@ -1116,10 +1122,12 @@ function renderQueue() {
     return;
   }
   // unassigned cards can be taken; held ones show who has them and open instead
-  const rows = list.slice(S.queuePage * PAGE_SIZE, (S.queuePage + 1) * PAGE_SIZE).map((c) => (c.claimed_by
+  const pg = RC.pageOf(list, S.queuePage, PAGE_SIZE);
+  S.queuePage = pg.page;
+  const rows = pg.rows.map((c) => (c.claimed_by
     ? cardRow(c, `<button class="btn-ghost btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button>`, true)
     : cardRow(c, `<button class="btn-primary btn-sm" data-act="take" data-key="${esc(c.card_key)}">Take</button>`))).join('');
-  $('queue-table').innerHTML = cardTable(rows, pager(list.length, S.queuePage), S.queueSort);
+  $('queue-table').innerHTML = cardTable(rows, pager(pg), S.queueSort);
 }
 function clearQueueFilters() {
   S.filters = { state: '', type: '', due: '', kind: '', search: '' };
@@ -1179,10 +1187,12 @@ function renderMine() {
     return;
   }
   const canRelease = (c) => c.claimed_by === S.me.id || S.me.role === 'manager';
-  $('mine-table').innerHTML = cardTable(list.map((c) => cardRow(c,
+  const pg = RC.pageOf(list, S.minePage, PAGE_SIZE);
+  S.minePage = pg.page;
+  $('mine-table').innerHTML = cardTable(pg.rows.map((c) => cardRow(c,
     `<button class="btn-primary btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button>
      ${canRelease(c) ? `<button class="btn-ghost btn-sm" data-act="release" data-key="${esc(c.card_key)}">Release</button>` : ''}`,
-    !mine)).join(''), null, S.mineSort, 'mine-sort');
+    !mine)).join(''), pager(pg, 'mine-page'), S.mineSort, 'mine-sort');
 }
 
 // ---------- actions ----------
@@ -1935,6 +1945,7 @@ document.addEventListener('click', (e) => {
   if (minePill) {
     const f = minePill.dataset.filter;
     S.mineFilters[f] = S.mineFilters[f] === minePill.dataset.value ? '' : minePill.dataset.value;
+    S.minePage = 0;
     renderMine();
     return;
   }
@@ -1955,10 +1966,12 @@ document.addEventListener('click', (e) => {
     case 'page': S.queuePage = Math.max(0, +btn.dataset.page); renderQueue(); break;
     case 'queue-sort': S.queueSort = RC.nextSort(S.queueSort, btn.dataset.sort); S.queuePage = 0; renderQueue(); break;
     case 'queue-clear': clearQueueFilters(); break;
-    case 'mine-sort': S.mineSort = RC.nextSort(S.mineSort, btn.dataset.sort); renderMine(); break;
+    case 'mine-page': S.minePage = Math.max(0, +btn.dataset.page); renderMine(); break;
+    case 'mine-sort': S.mineSort = RC.nextSort(S.mineSort, btn.dataset.sort); S.minePage = 0; renderMine(); break;
     case 'mine-clear':
       S.mineFilters = { state: '', type: '', due: '', kind: '', search: '' };
       $('m-kind').value = ''; $('m-search').value = '';
+      S.minePage = 0;
       renderMine();
       break;
     case 'signout': signOut(); break;
@@ -1968,10 +1981,10 @@ document.addEventListener('click', (e) => {
 });
 $('f-kind').addEventListener('change', (e) => { S.filters.kind = e.target.value; S.queuePage = 0; renderQueue(); });
 $('f-search').addEventListener('input', (e) => { S.filters.search = e.target.value; S.queuePage = 0; renderQueue(); });
-$('m-kind').addEventListener('change', (e) => { S.mineFilters.kind = e.target.value; renderMine(); });
-$('mine-who').addEventListener('change', (e) => { S.mineWho = e.target.value; renderMine(); });
+$('m-kind').addEventListener('change', (e) => { S.mineFilters.kind = e.target.value; S.minePage = 0; renderMine(); });
+$('mine-who').addEventListener('change', (e) => { S.mineWho = e.target.value; S.minePage = 0; renderMine(); });
 $('queue-who').addEventListener('change', (e) => { S.queueWho = e.target.value; S.queuePage = 0; renderQueue(); });
-$('m-search').addEventListener('input', (e) => { S.mineFilters.search = e.target.value; renderMine(); });
+$('m-search').addEventListener('input', (e) => { S.mineFilters.search = e.target.value; S.minePage = 0; renderMine(); });
 $('signin-form').addEventListener('submit', sendCode);
 $('code-form').addEventListener('submit', verifyCode);
 
