@@ -46,4 +46,4 @@ When it doesn't apply, the requester stays the booker, as before. Public worksho
 **Effect on real data, 18 Nov 2026:**
 - 163 of 3,624 students change card, and cards go from 1,170 to 1,080.
 - 93 of the movers had booked themselves onto an in-house class and now go to its owner.
-- GL Training owners (Aiyaz Hussein, Scott Willis, Wendy Ramsay) are Kallibr's Gold Coast staff, so they're treated as Kallibr.
+- GL Training owners (Aiyaz Hussein, Scott Willis, Wendy Ramsay) are Kallibr's Gold Coast staff, so they're treated as Kallibr. *(Confirmed by the owner, 18 Nov 2026.)*
