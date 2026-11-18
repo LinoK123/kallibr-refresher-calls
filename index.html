@@ -733,6 +733,24 @@ const RC = (() => {
     });
   }
 
+  // "Copy for email": the open refreshers in the given groups as an email-ready table (HTML for Outlook,
+  // tab-separated text elsewhere), with a blank "Date to book" column for the booking contact to fill in.
+  function emailTable(groups) {
+    const head = ['Student', 'Refresher', 'Last done', 'Due', 'Date to book'];
+    const rows = [];
+    for (const g of groups) {
+      for (const r of g.rows) {
+        if (isOpen(r)) rows.push([g.full_name, r.refresher_type, fmtMonth(r.last_done), fmtMonth(r.due_date), '']);
+      }
+    }
+    const text = [head, ...rows].map((r) => r.join('\t')).join('\n') + '\n';
+    const cell = 'border:1px solid #c8c8d4;padding:6px 10px;font-family:Arial,sans-serif;font-size:13px;text-align:left';
+    const html = `<table style="border-collapse:collapse"><tr>${head.map((h) => `<th style="${cell};background:#ece8f7">${esc(h)}</th>`).join('')}</tr>`
+      + rows.map((r) => `<tr>${r.map((v) => `<td style="${cell}">${v ? esc(v) : '&nbsp;'}</td>`).join('')}</tr>`).join('')
+      + '</table>';
+    return { html, text, count: rows.length };
+  }
+
   function cardSummary(groups, todayIso) {
     const open = groups.flatMap((g) => g.rows.filter(isOpen));
     if (!open.length) return 'No open refreshers';
@@ -916,7 +934,7 @@ const RC = (() => {
 
   return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, signInError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
            queueCards, assignedCards, myCards, heldCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
-           filterGroups, sortGroups, cardSummary,
+           filterGroups, sortGroups, cardSummary, emailTable,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
            weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort, callbackList, fmtWeekday,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
@@ -1272,12 +1290,10 @@ function drawCard() {
         <textarea class="form-textarea" id="call-notes" placeholder="Who you spoke to and what they said…"></textarea></div>
       <div id="save-msg"></div>
       <div class="tools-row"><button class="btn-primary" data-act="save-call" id="save-call">Save Call Log</button>
-        <button class="btn-ghost" data-act="release" data-key="${esc(card.card_key)}">Release card</button>
         <span class="muted" style="font-size:0.78rem" id="sel-count"></span></div>
     </div>`;
   } else if (card.claimed_by) {
-    form = `<div class="card"><div class="tools-row"><span style="font-weight:600">🔒 Taken by ${esc(card.claimed_by_name || staffName(card.claimed_by))}</span>
-      ${manager ? `<button class="btn-ghost btn-sm" data-act="release" data-key="${esc(card.card_key)}">Release card</button>` : ''}</div></div>`;
+    form = `<div class="card"><div class="tools-row"><span style="font-weight:600">🔒 Taken by ${esc(card.claimed_by_name || staffName(card.claimed_by))}</span></div></div>`;
   } else if (card.do_not_call) {
     form = '';
   } else if (card.open_lines > 0) {
@@ -1315,7 +1331,8 @@ function drawCard() {
       </div>
       <div class="hero-summary">${esc(RC.cardSummary(groups, t))}${tentative}</div>
       ${siblingHtml}
-      <div class="hero-line">${owner}${card.callback_on ? ` · call back ${esc(RC.fmtDate(card.callback_on))}` : ''}</div>
+      <div class="hero-line tools-row">${owner}${card.callback_on ? ` · call back ${esc(RC.fmtDate(card.callback_on))}` : ''}
+        ${card.claimed_by && (mine || manager) ? `<button class="btn-ghost btn-sm" data-act="release" data-key="${esc(card.card_key)}">Release card</button>` : ''}</div>
     </div>
     ${S.cardNotice ? `<div class="banner banner-info"><div class="banner-title">ℹ️ ${esc(S.cardNotice)}</div></div>` : ''}
     ${card.do_not_call ? `<div class="banner banner-danger"><div class="banner-title">🚫 Do not call</div><div class="banner-sub">This card is marked do not call. Its open refreshers were closed and new ones are closed automatically.${manager ? ' Use Clear do not call below to undo this.' : ''}</div></div>` : ''}
@@ -1348,6 +1365,7 @@ function cardFilterRow(lines) {
       </select>
       <input class="search-input" id="cf-search" style="max-width:260px" placeholder="🔍  Search students…" aria-label="Search students">
       <span class="muted" style="font-size:0.8rem" id="card-count"></span>
+      <button class="btn-ghost btn-sm" data-act="copy-email" title="Copy the refreshers shown below as a table to paste into an email">📋 Copy for email</button>
       <button class="link-btn hidden" id="cf-clear" data-act="card-clear">Clear filters</button>
     </div>`;
 }
@@ -1410,6 +1428,39 @@ function drawCardTable() {
     </table></div></div>`;
   document.querySelectorAll('.line-outcome').forEach((s) => { s.value = v.sel[s.dataset.line] || ''; });
   updateSelCount();
+}
+// "📋 Copy for email": the open refreshers currently shown in the card's table (filters and sort applied)
+async function copyForEmail() {
+  if (!S.cardData) return;
+  const { lines, students } = S.cardData;
+  const t = today(), v = S.cardView;
+  const shown = RC.sortGroups(RC.filterGroups(RC.groupLines(lines, students, t), v.filters, t), v.sort.key, v.sort.dir);
+  const table = RC.emailTable(shown);
+  if (!table.count) { toast('Nothing to copy: no refreshers left to book in the table'); return; }
+  const done = () => toast(`Copied ${table.count} refresher${table.count === 1 ? '' : 's'} ✓ Paste into your email`);
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([table.html], { type: 'text/html' }),
+      'text/plain': new Blob([table.text], { type: 'text/plain' }),
+    })]);
+    done();
+  } catch (e) {
+    // older browsers: select a hidden copy of the (already escaped) table and use the copy command
+    const box = document.createElement('div');
+    box.contentEditable = 'true';
+    box.style.cssText = 'position:fixed;left:-9999px;top:0';
+    box.innerHTML = table.html;
+    document.body.appendChild(box);
+    const range = document.createRange();
+    range.selectNodeContents(box);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const ok = document.execCommand('copy');
+    sel.removeAllRanges();
+    box.remove();
+    if (ok) done(); else toast("Couldn't copy. Your browser blocked the clipboard.");
+  }
 }
 function updateSelCount() {
   const box = $('sel-count');
@@ -1488,6 +1539,7 @@ function onAction(act, btn) {
       break;
     }
     case 'card-clear': S.cardView.filters = newCardView().filters; drawCardTable(); break;
+    case 'copy-email': copyForEmail(); break;
     case 'assign': cardRpc('assign_card', { p_card_key: S.cardKey, p_staff_id: $('assign-to').value || null }, 'Card assigned ✓'); break;
     case 'clear-dnc': cardRpc('clear_do_not_call', { p_card_key: S.cardKey }, 'Do not call cleared ✓'); break;
     default: if (typeof onMoreAction === 'function') onMoreAction(act, btn);

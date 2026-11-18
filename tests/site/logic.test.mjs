@@ -402,3 +402,24 @@ test('assignedCards: nobody (the usual queue), everyone, or one person; never do
   assert.deepEqual(keys('all'), ['free', 'jo', 'al']);
   assert.deepEqual(keys('u1'), ['jo']);
 });
+
+// ---------- Card: Copy for email ----------
+test('emailTable: open refreshers only, five columns with a blank Date to book, HTML escaped', () => {
+  const lines = [L(1, 1, 'Heights', '2026-06-10', 'not_called', { last_done: '2024-06-10' }),
+                 L(2, 1, 'Confined Space', '2026-07-20', 'pending', { last_done: '2024-07-20' }),
+                 L(3, 2, 'HSR', '2027-02-01', 'won', { last_done: '2026-02-01' }),
+                 L(4, 3, 'Heights', '2026-08-01', 'lost', { last_done: '2024-08-01' })];
+  const students = [{ contact_id: 1, full_name: "Sean O'Brien <Jr>" }, { contact_id: 2, full_name: 'Ann Brown' }, { contact_id: 3, full_name: 'Zed Young' }];
+  const t = RC.emailTable(RC.groupLines(lines, students, T));
+  assert.equal(t.count, 2);
+  assert.equal(t.text, "Student\tRefresher\tLast done\tDue\tDate to book\n"
+    + "Sean O'Brien <Jr>\tHeights\tJun 2024\tJun 2026\t\n"
+    + "Sean O'Brien <Jr>\tConfined Space\tJul 2024\tJul 2026\t\n");
+  assert.match(t.html, /<table/);
+  assert.match(t.html, /Sean O&#39;Brien &lt;Jr&gt;/);
+  assert.ok(!t.html.includes('<Jr>'));
+  assert.equal((t.html.match(/<th/g) || []).length, 5);
+  assert.match(t.html, /Date to book/);
+  assert.equal((t.html.match(/<tr/g) || []).length, 3);              // header + 2 refreshers
+  assert.equal(RC.emailTable([]).count, 0);
+});
