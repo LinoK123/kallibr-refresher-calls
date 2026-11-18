@@ -162,3 +162,32 @@ test('fmtDateTime is Sydney time', () => {
   assert.equal(RC.fmtDateTime('2026-06-30T04:05:00Z'), '30 Jun 2026, 2:05 pm');
   assert.equal(RC.fmtDateTime('2026-11-18T13:00:00Z'), '19 Nov 2026, 12:00 am');
 });
+
+// ---------- Task 11: dashboard ----------
+test('cohortChart fills gaps and keeps segment order', () => {
+  const rows = [{ month: '2025-01-01', segment: 'won', n: 2 }, { month: '2025-03-01', segment: 'not_called', n: 5 }];
+  const c = plain(RC.cohortChart(rows));
+  assert.deepEqual(c.labels, ['Jan 2025', 'Feb 2025', 'Mar 2025']);
+  assert.deepEqual(c.datasets.map((d) => d.label), ['Won', 'Booked without a call', 'Lost', 'Pending', 'Not called']);
+  assert.deepEqual(c.datasets[0].data, [2, 0, 0]); assert.deepEqual(c.datasets[4].data, [0, 0, 5]);
+  assert.equal(c.datasets[2].backgroundColor, '#f2a0b0');
+});
+test('cohortChart spans a year boundary', () => {
+  const c = plain(RC.cohortChart([{ month: '2024-11-01', segment: 'lost', n: 1 }, { month: '2025-02-01', segment: 'lost', n: 3 }]));
+  assert.deepEqual(c.labels, ['Nov 2024', 'Dec 2024', 'Jan 2025', 'Feb 2025']);
+  assert.deepEqual(c.datasets[2].data, [1, 0, 0, 3]);
+});
+test('cohortChart with no rows', () => assert.deepEqual(plain(RC.cohortChart([])),
+  { labels: [], datasets: plain(RC.SEGMENTS).map((s) => ({ label: s.label, data: [], backgroundColor: s.color })) }));
+test('kpis', () => assert.deepEqual(plain(RC.kpis([{ month: '2025-01-01', segment: 'won', n: 2 }, { month: '2025-01-01', segment: 'booked_without_call', n: 1 },
+  { month: '2025-02-01', segment: 'lost', n: 4 }, { month: '2025-02-01', segment: 'not_called', n: 10 }])),
+  { total: 17, not_called: 10, pending: 0, won: 3, lost: 4, booked_without_call: 1 }));
+test('periodStart', () => {                                    // 18 Nov 2026 is a Wednesday
+  assert.equal(RC.periodStart('week', '2026-11-18'), '2026-11-16');
+  assert.equal(RC.periodStart('week', '2026-11-16'), '2026-11-16');
+  assert.equal(RC.periodStart('week', '2026-11-22'), '2026-11-16');   // Sunday belongs to the week that began on Monday
+  assert.equal(RC.periodStart('week', '2026-03-01'), '2026-02-23');
+  assert.equal(RC.periodStart('month', '2026-11-18'), '2026-11-01');
+  assert.equal(RC.periodStart('all', '2026-11-18'), null);
+});
+test('fmtRate', () => { assert.equal(RC.fmtRate(0.5), '50%'); assert.equal(RC.fmtRate(null), '–'); assert.equal(RC.fmtRate('0.667'), '67%'); });

@@ -298,6 +298,13 @@ a:hover{text-decoration:underline;}
 .log-notes{white-space:pre-wrap;word-break:break-word;}
 .log-outcomes{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;}
 .tools-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+/* KPI row of five; its own grid so the semantic accent stripes aren't overridden by .grid-4's cycling colours */
+.kpi-5{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+.kpi-card.accent-neutral{--kpi-accent:var(--lav2);}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.card-head .card-subtitle{margin-bottom:0;}
+@media(max-width:1100px){.kpi-5{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:900px){.kpi-5{grid-template-columns:repeat(2,1fr);}}
 </style>
 </head>
 <body>
@@ -423,6 +430,26 @@ a:hover{text-decoration:underline;}
     <div class="modal-head"><div class="card-title" id="dnc-title" style="margin:0">🚫 Do not call</div><button class="modal-x" data-act="dnc-cancel" aria-label="Close">✕</button></div>
     <p style="font-size:0.86rem;line-height:1.5;margin-bottom:12px">Mark this whole card as do not call? Every open refresher on it will be closed and this person won't appear on future lists.</p>
     <div class="modal-foot"><button class="btn-ghost" data-act="dnc-no">No, just this refresher</button><button class="btn-danger" data-act="dnc-yes">Yes, the whole card</button></div>
+  </div>
+</div>
+
+<!-- Add / edit team member -->
+<div class="modal-backdrop" id="staff-modal">
+  <div class="modal" role="dialog" aria-labelledby="staff-title" style="max-width:520px">
+    <div class="modal-head"><div class="card-title" id="staff-title" style="margin:0">Add a team member</div><button class="modal-x" data-act="staff-cancel" aria-label="Close">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label" for="sm-name">Name <span class="req">*</span></label><input class="form-input" id="sm-name" autocomplete="off"></div>
+      <div class="form-group"><label class="form-label" for="sm-email">Kallibr email <span class="req">*</span></label><input class="form-input" id="sm-email" type="email" autocomplete="off"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label" for="sm-role">Role</label>
+        <select class="form-select" id="sm-role"><option value="staff">Staff</option><option value="manager">Manager</option></select></div>
+      <div class="form-group"><div class="form-label">Access</div><label class="check-pill"><input type="checkbox" id="sm-active" checked>Active</label></div>
+    </div>
+    <div class="form-hint" style="margin-bottom:12px">They also need an invitation: in Supabase, open Authentication → Users → Add user → Send invitation, with the same email.
+      Turning Active off hands their cards back to the queue.</div>
+    <div id="sm-msg"></div>
+    <div class="modal-foot"><button class="btn-ghost" data-act="staff-cancel">Cancel</button><button class="btn-primary" data-act="staff-save" id="sm-save">Save</button></div>
   </div>
 </div>
 
@@ -559,9 +586,62 @@ const RC = (() => {
     return null;
   }
 
+  // ---- dashboard ----
+  const SEGMENTS = [
+    { key: 'won', label: 'Won', color: '#9ecf9e' },
+    { key: 'booked_without_call', label: 'Booked without a call', color: '#c8e6c8' },
+    { key: 'lost', label: 'Lost', color: '#f2a0b0' },
+    { key: 'pending', label: 'Pending', color: '#f9be7c' },
+    { key: 'not_called', label: 'Not called', color: '#ddd4f0' },
+  ];
+  const monthKey = (iso) => `${String(iso).slice(0, 7)}-01`;
+  function monthsBetween(first, last) {
+    const out = [];
+    let y = +first.slice(0, 4), m = +first.slice(5, 7);
+    const ey = +last.slice(0, 4), em = +last.slice(5, 7);
+    while (y < ey || (y === ey && m <= em)) {
+      out.push(`${y}-${String(m).padStart(2, '0')}-01`);
+      if (++m > 12) { m = 1; y += 1; }
+    }
+    return out;
+  }
+  function cohortChart(rows) {
+    if (!rows.length) return { labels: [], datasets: SEGMENTS.map((s) => ({ label: s.label, data: [], backgroundColor: s.color })) };
+    const months = rows.map((r) => monthKey(r.month)).sort();
+    const all = monthsBetween(months[0], months[months.length - 1]);
+    const at = new Map(all.map((m, i) => [m, i]));
+    const datasets = SEGMENTS.map((s) => ({ label: s.label, data: all.map(() => 0), backgroundColor: s.color }));
+    for (const r of rows) {
+      const si = SEGMENTS.findIndex((s) => s.key === r.segment);
+      if (si >= 0) datasets[si].data[at.get(monthKey(r.month))] += Number(r.n);
+    }
+    return { labels: all.map(fmtMonth), datasets };
+  }
+  function kpis(rows) {
+    const k = { total: 0, not_called: 0, pending: 0, won: 0, lost: 0, booked_without_call: 0 };
+    for (const r of rows) {
+      const n = Number(r.n);
+      k.total += n;
+      if (r.segment === 'booked_without_call') { k.won += n; k.booked_without_call += n; }
+      else if (r.segment in k) k[r.segment] += n;
+    }
+    return k;
+  }
+  function periodStart(period, todayIso) {
+    if (period === 'month') return `${todayIso.slice(0, 8)}01`;
+    if (period === 'week') {
+      const d = new Date(`${todayIso}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));       // back to Monday
+      return d.toISOString().slice(0, 10);
+    }
+    return null;
+  }
+  const fmtRate = (x) => (x === null || x === undefined || x === '' ? '–' : `${Math.round(Number(x) * 100)}%`);
+
   return { PROFILE_URL, profileUrl, esc, sydneyToday, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
            queueCards, myCards, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines, cardSummary,
-           buildOutcomes, validateCallLog, _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
+           buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
+           _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
 if (typeof module !== 'undefined') module.exports = RC;
 </script>
@@ -620,7 +700,7 @@ function friendlyError(error) {
   const m = String((error && error.message) || error || '');
   if (/not staff/i.test(m)) return 'Your account is no longer active for this tool.';
   if (/Failed to fetch|NetworkError|network/i.test(m)) return "Couldn't reach the server. Check your connection and try again.";
-  return m || 'Unknown error';
+  return m ? m.charAt(0).toUpperCase() + m.slice(1) : 'Unknown error';
 }
 
 // ---------- data ----------
@@ -977,6 +1057,177 @@ function onAction(act, btn) {
     default: if (typeof onMoreAction === 'function') onMoreAction(act, btn);
   }
 }
+// ---------- dashboard ----------
+const DASH = { period: 'month', type: '', state: '', chart: null };
+const RESULT_BADGE = { ok: ['badge-success', '🟢 OK'], aborted: ['badge-warning', '🟡 Stopped'],
+                       failed: ['badge-danger', '🔴 Failed'], running: ['badge-info', 'Running'] };
+function segButtons(name, options, current) {
+  return `<div class="segmented">${options.map(([v, label]) =>
+    `<button class="${v === current ? 'active' : ''}" data-act="${name}" data-value="${esc(v)}">${esc(label)}</button>`).join('')}</div>`;
+}
+function pills(name, options, current) {
+  return options.map(([v, label]) =>
+    `<button class="pill ${v === current ? 'active' : ''}" data-act="${name}" data-value="${esc(v)}">${esc(label)}</button>`).join('');
+}
+async function renderDashboard() {
+  const body = $('dashboard-body');
+  if (!body.dataset.ready) {
+    body.innerHTML = `
+      <div class="kpi-5" id="kpis"><div class="loading">Loading…</div></div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Progress by month of last course</div>
+          <div class="card-subtitle">Each bar is the refreshers whose last course was in that month (refreshers, not people)</div></div></div>
+        <div class="filter-row" id="cohort-filters"></div>
+        <div style="position:relative;height:320px"><canvas id="cohort-chart" aria-label="Refreshers by month of last course, stacked by outcome" role="img"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Team</div><div class="card-subtitle">Cards taken, calls logged and results per team member</div></div>
+          <div id="period-toggle"></div></div>
+        <div id="team-table"></div>
+      </div>`;
+    body.dataset.ready = '1';
+  }
+  await Promise.all([drawKpis(), drawCohort(), drawTeam()]);
+}
+async function drawKpis() {
+  const { data, error } = await S.sb.rpc('cohort_counts');
+  if (error) { $('kpis').innerHTML = errorBanner(friendlyError(error)); return; }
+  const k = RC.kpis(data);
+  const kpi = (accent, label, value, sub) => `<div class="kpi-card ${accent}"><div class="kpi-label">${label}</div>
+    <div class="kpi-value">${esc(value.toLocaleString('en-AU'))}</div><div class="kpi-sub">${sub}</div></div>`;
+  $('kpis').innerHTML =
+    kpi('accent-brand', 'Total refreshers', k.total, 'Everyone listed so far') +
+    kpi('accent-neutral', 'Not called', k.not_called, 'No outcome logged yet') +
+    kpi('accent-warning', '🟡 Pending', k.pending, 'Called, not settled') +
+    kpi('accent-success', '🟢 Won', k.won, `${esc(k.booked_without_call.toLocaleString('en-AU'))} booked without a call`) +
+    kpi('accent-danger', '🔴 Lost', k.lost, 'Not needed, elsewhere, left or do not call');
+}
+async function drawCohort() {
+  $('cohort-filters').innerHTML =
+    pills('cohort-type', [['', 'All refreshers'], ['Confined Space', 'Confined space'], ['Heights', 'Heights'], ['HSR', 'HSR']], DASH.type) +
+    '<span style="width:8px"></span>' +
+    pills('cohort-state', [['', 'All states'], ['QLD', 'QLD'], ['NSW', 'NSW'], ['VIC', 'VIC'], ['G+L', 'G+L']], DASH.state);
+  const ticket = (DASH.cohortTicket = (DASH.cohortTicket || 0) + 1);
+  const { data, error } = await S.sb.rpc('cohort_counts', { p_type: DASH.type || null, p_location: DASH.state || null });
+  if (ticket !== DASH.cohortTicket) return;              // a newer filter click has taken over
+  if (error) { toast(friendlyError(error)); return; }
+  const c = RC.cohortChart(data);
+  if (DASH.chart) DASH.chart.destroy();
+  DASH.chart = new Chart($('cohort-chart'), {
+    type: 'bar',
+    data: { labels: c.labels, datasets: c.datasets.map((d) => ({ ...d, borderRadius: 6, borderSkipped: false,
+      borderColor: '#ffffff', borderWidth: 1 })) },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 11, color: '#6b6b82' } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toLocaleString('en-AU')}` } },
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 }, color: '#6b6b82' } },
+        y: { stacked: true, grid: { color: 'rgba(0,0,0,0.04)' }, border: { display: false },
+             ticks: { font: { size: 10 }, color: '#6b6b82', precision: 0 } },
+      },
+    },
+  });
+}
+async function drawTeam() {
+  $('period-toggle').innerHTML = segButtons('period', [['week', 'This week'], ['month', 'This month'], ['all', 'All time']], DASH.period);
+  const from = RC.periodStart(DASH.period, today());
+  const ticket = (DASH.teamTicket = (DASH.teamTicket || 0) + 1);
+  const { data, error } = await S.sb.rpc('team_stats', { p_from: from });
+  if (ticket !== DASH.teamTicket) return;
+  if (error) { $('team-table').innerHTML = errorBanner(friendlyError(error)); return; }
+  if (!data.length) { $('team-table').innerHTML = '<div class="muted">No active team members yet.</div>'; return; }
+  $('team-table').innerHTML = `<div class="table-wrap"><div class="table-scroll"><table class="table">
+    <thead><tr><th>Team member</th><th class="num">Cards taken</th><th class="num">Calls logged</th><th class="num">Pending</th>
+      <th class="num">Won</th><th class="num">Lost</th><th class="num">Win rate</th></tr></thead>
+    <tbody>${data.map((r) => `<tr><td class="cell-name">${esc(r.full_name)}</td><td class="num">${esc(r.cards_taken)}</td>
+      <td class="num">${esc(r.calls_logged)}</td><td class="num">${esc(r.pending)}</td><td class="num">${esc(r.won)}</td>
+      <td class="num">${esc(r.lost)}</td><td class="num">${esc(RC.fmtRate(r.win_rate))}</td></tr>`).join('')}</tbody>
+  </table></div></div>`;
+}
+
+// ---------- admin ----------
+async function renderAdmin() {
+  const body = $('admin-body');
+  if (!S.me || S.me.role !== 'manager') { body.innerHTML = emptyState('🔒', 'Only managers can see this page.'); return; }
+  body.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    await loadStaff();
+    const runs = await S.sb.from('sync_runs').select('id, started_at, finished_at, result, message, lines_pushed, wins')
+      .order('id', { ascending: false }).limit(14);
+    if (runs.error) throw runs.error;
+    const staffRows = S.staff.map((s) => `<tr>
+      <td class="cell-name">${esc(s.full_name)}</td><td>${esc(s.email)}</td>
+      <td><span class="badge ${s.role === 'manager' ? 'badge-purple' : 'badge-neutral'}">${s.role === 'manager' ? 'Manager' : 'Staff'}</span></td>
+      <td><span class="badge ${s.active ? 'badge-success' : 'badge-neutral'}">${s.active ? 'Active' : 'Inactive'}</span></td>
+      <td><div class="actions"><button class="btn-ghost btn-sm" data-act="staff-edit" data-id="${esc(s.id)}">Edit</button></div></td></tr>`).join('');
+    const runRows = runs.data.map((r) => {
+      const [cls, label] = RESULT_BADGE[r.result] || ['badge-neutral', r.result];
+      return `<tr><td>${esc(RC.fmtDateTime(r.finished_at || r.started_at))}</td><td><span class="badge ${cls}">${esc(label)}</span></td>
+        <td style="max-width:420px">${esc(r.message || '')}</td><td class="num">${esc(r.lines_pushed ?? '')}</td><td class="num">${esc(r.wins ?? '')}</td></tr>`;
+    }).join('');
+    body.innerHTML = `
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">Team members</div>
+          <div class="card-subtitle">Who can sign in, and who can assign cards and clear do not call (managers)</div></div>
+          <button class="btn-primary" data-act="staff-add">+ Add team member</button></div>
+        <div class="table-wrap"><div class="table-scroll"><table class="table">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th></th></tr></thead>
+          <tbody>${staffRows}</tbody></table></div></div>
+        <div class="form-hint">New team members also need an invitation from Supabase (Authentication → Users → Add user → Send invitation) before they can sign in.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Nightly updates</div><div class="card-subtitle">The last 14 runs of the push from the designated PC</div>
+        ${runRows ? `<div class="table-wrap"><div class="table-scroll"><table class="table">
+          <thead><tr><th>When</th><th>Result</th><th>Message</th><th class="num">Lines</th><th class="num">Wins</th></tr></thead>
+          <tbody>${runRows}</tbody></table></div></div>` : '<div class="muted">No runs yet.</div>'}
+      </div>`;
+  } catch (e) {
+    body.innerHTML = errorBanner(friendlyError(e));
+  }
+}
+function openStaffModal(s) {
+  S.editingStaff = s || null;
+  $('staff-title').textContent = s ? 'Edit team member' : 'Add a team member';
+  $('sm-name').value = s ? s.full_name : '';
+  $('sm-email').value = s ? s.email : '';
+  $('sm-email').readOnly = !!s;
+  $('sm-role').value = s ? s.role : 'staff';
+  $('sm-active').checked = s ? s.active : true;
+  $('sm-msg').innerHTML = '';
+  $('staff-modal').classList.add('open');
+  $('sm-name').focus();
+}
+async function saveStaff() {
+  const name = $('sm-name').value.trim(), email = $('sm-email').value.trim().toLowerCase();
+  const fail = (m) => { $('sm-msg').innerHTML = `<div class="banner banner-danger"><div class="banner-title">${esc(m)}</div></div>`; };
+  if (!name) return fail('Enter their name.');
+  if (!/^[^@\s]+@[^@\s]+$/.test(email)) return fail('Enter a valid email address.');
+  $('sm-save').disabled = true;
+  const { error } = await S.sb.rpc('upsert_staff', { p_email: email, p_full_name: name, p_role: $('sm-role').value, p_active: $('sm-active').checked });
+  $('sm-save').disabled = false;
+  if (error) return fail(friendlyError(error));
+  $('staff-modal').classList.remove('open');
+  toast('Team member saved ✓');
+  await refresh();
+  renderAdmin();
+}
+function onMoreAction(act, btn) {
+  switch (act) {
+    case 'period': DASH.period = btn.dataset.value; drawTeam(); break;
+    case 'cohort-type': DASH.type = btn.dataset.value; drawCohort(); break;
+    case 'cohort-state': DASH.state = btn.dataset.value; drawCohort(); break;
+    case 'staff-add': openStaffModal(null); break;
+    case 'staff-edit': openStaffModal(S.staff.find((s) => s.id === btn.dataset.id)); break;
+    case 'staff-cancel': $('staff-modal').classList.remove('open'); break;
+    case 'staff-save': saveStaff(); break;
+    default: break;
+  }
+}
+$('staff-modal').addEventListener('click', (e) => { if (e.target.id === 'staff-modal') $('staff-modal').classList.remove('open'); });
+
 document.addEventListener('change', (e) => {
   if (e.target.id === 'apply-all' && e.target.value) {
     document.querySelectorAll('.line-outcome[data-open="1"]').forEach((s) => { s.value = e.target.value; });
