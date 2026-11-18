@@ -72,13 +72,13 @@ alter table stage_lines enable row level security;
 alter table stage_checks enable row level security;
 alter table stage_history enable row level security;
 
-create policy staff_read on staff for select to authenticated using (is_staff());
-create policy staff_read on cards for select to authenticated using (is_staff());
-create policy staff_read on students for select to authenticated using (is_staff());
-create policy staff_read on lines for select to authenticated using (is_staff());
-create policy staff_read on course_history for select to authenticated using (is_staff());
-create policy staff_read on call_logs for select to authenticated using (is_staff());
-create policy staff_read on line_outcomes for select to authenticated using (is_staff());
-create policy staff_read on card_events for select to authenticated using (is_staff());
-create policy staff_read on sync_runs for select to authenticated using (is_staff());
+create policy staff_read on staff for select to authenticated using ((select is_staff()));
+create policy staff_read on cards for select to authenticated using ((select is_staff()));
+create policy staff_read on students for select to authenticated using ((select is_staff()));
+create policy staff_read on lines for select to authenticated using ((select is_staff()));
+create policy staff_read on course_history for select to authenticated using ((select is_staff()));
+create policy staff_read on call_logs for select to authenticated using ((select is_staff()));
+create policy staff_read on line_outcomes for select to authenticated using ((select is_staff()));
+create policy staff_read on card_events for select to authenticated using ((select is_staff()));
+create policy staff_read on sync_runs for select to authenticated using ((select is_staff()));
 -- No policies on stage_* tables; no insert/update/delete policies anywhere.

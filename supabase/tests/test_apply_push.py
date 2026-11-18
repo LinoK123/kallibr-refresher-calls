@@ -241,3 +241,40 @@ def test_only_service_role_may_run(cur):
     as_user(cur, JO)
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         cur.execute("select apply_push(1)")
+
+
+def _stage_full_size(cur):
+    """A run of 3,600 students and 4,000 lines (with checks), like a real night."""
+    with as_owner(cur):
+        cur.execute("insert into sync_runs (result, students_pushed, lines_pushed, checks_pushed, history_pushed) "
+                    "values ('running', 3600, 4000, 4000, 0) returning id")
+        run = cur.fetchone()[0]
+        cur.execute("insert into stage_students select %s, g, 'S' || g, 'Org ' || (g %% 300), 'B:' || (100000 + g %% 600), "
+                    "'booker', 100000 + g %% 600, 'Booker ' || (g %% 600), 'Org ' || (g %% 300), 'org ' || (g %% 300) "
+                    "from generate_series(1, 3600) g", (run,))
+        cur.execute("insert into stage_lines select %s, g, 'Heights', date '2024-06-10', date '2026-06-10', 'Course', 'QLD', true "
+                    "from generate_series(1, 3600) g "
+                    "union all select %s, g, 'Confined Space', date '2024-06-10', date '2026-06-10', 'Course', 'NSW', true "
+                    "from generate_series(1, 400) g", (run, run))
+        cur.execute("insert into stage_checks select %s, contact_id, refresher_type, last_done, true, false, null, null, null, false "
+                    "from stage_lines where run_id = %s", (run, run))
+    return run
+
+
+def test_full_size_push_finishes_inside_the_api_time_limit(cur):
+    """About 4,000 lines in one run, under the 8s statement limit Supabase's API applies.
+
+    The staging tables are emptied every night, so their statistics say "pages on disk, zero rows";
+    plans built on that timed out on the test project (31s). Recreate that state, then push.
+    """
+    as_service(cur)
+    first = _stage_full_size(cur)
+    with as_owner(cur):
+        cur.execute("select apply_push(%s)", (first,))
+        cur.execute("delete from lines; delete from students; delete from cards")
+        cur.execute("analyze cards, students, lines, stage_students, stage_lines, stage_checks, stage_history")
+    run = _stage_full_size(cur)
+    as_service(cur)
+    cur.execute("set local statement_timeout = '8s'")
+    out = apply(cur, run)
+    assert out["lines_new"] == 4000

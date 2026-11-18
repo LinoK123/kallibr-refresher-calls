@@ -57,6 +57,11 @@ begin
   )
   select count(*) filter (where inserted) into n_new from up;
 
+  -- Fresh statistics for what was just loaded. The staging tables are emptied every night, so
+  -- their stored statistics say "zero rows"; plans built on that took 31s instead of under 1s
+  -- and hit the API's 8s limit. ANALYZE counts this transaction's own uncommitted rows.
+  analyze cards, students, lines, stage_checks, stage_history;
+
   -- 5. Do not call: a Not called line on a flagged card is lost straight away and never queued.
   update lines l
      set status = 'lost', outcome = 'do_not_call', last_outcome_by = null, last_outcome_at = null
