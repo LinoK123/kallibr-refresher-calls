@@ -151,11 +151,27 @@ def _staff_names(con) -> set[str]:
     return {_norm(n) for n, k in rows if k >= config.STAFF_ENTERED_MIN and _norm(n)}
 
 
-def _requesters(con) -> dict[int, tuple[int, str]]:
-    """booking ID -> (requester contact ID, requester name), where a requester is recorded."""
+def _is_kallibr(who: int, name, org, staff: set[str], ignore: set[int]) -> bool:
+    """A contact who works for Kallibr: their organisation starts with a STAFF_ORG_PREFIXES entry,
+    their name is a staff name, or they're on the ignore list."""
+    org = (org or "").strip().lower()
+    return (who in ignore or (_norm(name) and _norm(name) in staff)
+            or any(org.startswith(p.lower()) for p in config.STAFF_ORG_PREFIXES))
+
+
+def _bookers(con, staff: set[str], ignore: set[int]) -> dict[int, tuple[int, str]]:
+    """booking ID -> (booker contact ID, booker name). The booker is the person the booking was requested by,
+    except on an in-house class whose owner (the class's client contact) doesn't work for Kallibr: then the
+    owner is the booker (in-house owner rule, 18 Nov 2026)."""
     out = {}
-    for sid, who, name in con.execute("select statusid, whobyid, workshopbookingrequestedbyfullname from bookings"):
-        if sid is not None and who is not None and sid not in out:
+    rows = con.execute("select b.statusid, b.whobyid, b.workshopbookingrequestedbyfullname, c.ptype, c.clientcontactid, "
+                       "c.clientfullname, c.clientorgname from bookings b left join classes c on c.pdataid = b.pdataid")
+    for sid, who, name, ptype, owner, owner_name, owner_org in rows:
+        if sid is None or sid in out:
+            continue
+        if ptype == "In-House" and owner is not None and not _is_kallibr(int(owner), owner_name, owner_org, staff, ignore):
+            out[sid] = (int(owner), (owner_name or "").strip())
+        elif who is not None:
             out[sid] = (int(who), (name or "").strip())
     return out
 
@@ -166,7 +182,7 @@ def _current_bookers(con, today: date, staff: set[str], ignore: set[int]):
     Returns (counts by (org_key, state), counts by org_key, active (org_key, who) pairs,
     latest booking date by (scope, who), latest name by who)."""
     since = add_months(today, -config.CURRENT_BOOKER_MONTHS)
-    requesters = _requesters(con)
+    requesters = _bookers(con, staff, ignore)
     by_state, by_org = defaultdict(Counter), defaultdict(Counter)
     latest, names, name_at, active, seen = {}, {}, {}, set(), set()
     rows = con.execute("select booking_id, contact_id, organisation, location, start_date, booked_on, counted from v_bookings")
@@ -210,9 +226,9 @@ def place_students(con: sqlite3.Connection, lines: list[Line],
     for b in _bookings(con, types):
         if b.counted:
             real[(b.contact_id, b.course_type_id, b.start_date)].append(b.booking_id)
-    requesters = _requesters(con)
     staff = _staff_names(con)
     ignore = set(ignore_ids)
+    requesters = _bookers(con, staff, ignore)
 
     def booker_for(l: Line):
         for bid in sorted(real.get((l.contact_id, l.course_type_id, l.last_done), []), reverse=True):

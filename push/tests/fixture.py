@@ -14,6 +14,7 @@ create table v_bookings(booking_id integer, contact_id integer, student text, or
                         booked_on text, counted integer);
 create table bookings(statusid integer, contactid integer, pdataid integer, whobyid integer,
                       workshopbookingrequestedbyfullname text, bookedstatusenteredbyfullname text);
+create table classes(pdataid integer, ptype text, clientcontactid integer, clientfullname text, clientorgname text);
 create table sync_log(synced_at text, table_name text, row_count integer);
 """
 GROUPS = [(100889, "Heights"), (100890, "Confined Space"), (116646, "Confined Space"), (116646, "Heights")]
@@ -38,7 +39,10 @@ def _next_id(con):
 
 
 def book(con, contact, ct, start, status="Booked", counted=1, booker=None, booker_name=None,
-         entered_by="Admin Person", booked_on=None, org="Acme Pty Ltd", name=None, loc="QLD", course="Course"):
+         entered_by="Admin Person", booked_on=None, org="Acme Pty Ltd", name=None, loc="QLD", course="Course",
+         owner=None, owner_name=None, owner_org="Acme Pty Ltd", coordination="In-House"):
+    """One booking. With `owner`, the booking's class gets that owner (client contact), and is In-House
+    unless `coordination` says otherwise."""
     bid = _next_id(con)
     class_id = 10_000 + bid
     con.execute("insert into v_bookings values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -46,6 +50,8 @@ def book(con, contact, ct, start, status="Booked", counted=1, booker=None, booke
                  booked_on, counted))
     con.execute("insert into bookings values (?, ?, ?, ?, ?, ?)",
                 (bid, contact, class_id, booker, booker_name, entered_by))
+    if owner is not None:
+        con.execute("insert into classes values (?, ?, ?, ?, ?)", (class_id, coordination, owner, owner_name, owner_org))
     con.commit()
     return bid
 

@@ -29,3 +29,21 @@ A student's first-pass card comes from spec 5.3 as today. Then, for a student wh
 ## Effect the owner accepted
 
 A held card whose booker has gone quiet loses its students who haven't been called yet, to the company's current booker. Students with a logged call stay.
+
+## In-house owner rule (added 18 November 2026, at the owner's request)
+
+**Rule:** on an **in-house** class, the booker of each booking is the class's **owner** (its client contact in aXcelerate), not the person the booking was requested by. The owner rule doesn't apply when the owner works for Kallibr. That means:
+- their organisation starts with "Kallibr" or "GL Training" (`config.STAFF_ORG_PREFIXES`);
+- their name is a staff name (50+ bookings entered); or
+- they're on the ignore list.
+
+When it doesn't apply, the requester stays the booker, as before. Public workshops always use the requester.
+
+**Where it applies:** both in the first-pass card (spec 5.3) and in the current-booker counts above.
+
+**Example:** Andrew Brassell's confined space course on 17 March 2025 (class 2069058) was requested by Raghav Bansal, but Chetana Rountree owns that class. He moves from Raghav's card to Chetana's.
+
+**Effect on real data, 18 Nov 2026:**
+- 163 of 3,624 students change card, and cards go from 1,170 to 1,080.
+- 93 of the movers had booked themselves onto an in-house class and now go to its owner.
+- GL Training owners (Aiyaz Hussein, Scott Willis, Wendy Ramsay) are Kallibr's Gold Coast staff, so they're treated as Kallibr.

@@ -94,7 +94,7 @@ The emails must carry a **code** (`{{ .Token }}`), never `{{ .ConfirmationURL }}
 
 ## The nightly push
 
-`push/refresher_push.py` runs on the **designated PC** after the nightly aXcelerate sync. It opens `%USERPROFILE%\KallibrAgent\axc_agent.db` read-only. From it, it works out who is due (spec 5.2), which card each student belongs on (5.3) and which refreshers have been won (5.5). It uploads that to staging tables in Supabase and calls `apply_push` to merge it in one transaction, so a failure changes nothing. It never deletes call logs, outcomes or claims.
+`push/refresher_push.py` runs on the **designated PC** after the nightly aXcelerate sync. It opens `%USERPROFILE%\KallibrAgent\axc_agent.db` read-only. From it, it works out who is due (spec 5.2), which card each student belongs on (5.3) and which refreshers have been won (5.5). A booking's booker is the person it was requested by. On an in-house class, though, the booker is the class owner, unless the owner works for Kallibr: an organisation starting "Kallibr" or "GL Training" (`STAFF_ORG_PREFIXES` in `push/config.py`), or a staff name. See `docs/superpowers/specs/2026-11-18-current-booker-design.md`. It uploads that to staging tables in Supabase and calls `apply_push` to merge it in one transaction, so a failure changes nothing. It never deletes call logs, outcomes or claims.
 
 ```
 py push/refresher_push.py --set-key          # once per PC: project URL + secret key into Windows Credential Manager

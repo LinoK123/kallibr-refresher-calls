@@ -66,6 +66,55 @@ def test_cancelled_booking_does_not_supply_the_booker(con):
     assert place_students(con, build_lines(con, TODAY))[1].card_key == "O:acme pty ltd"
 
 
+# ---- In-house classes: the class owner is the booker (unless they are Kallibr staff) ----
+
+def test_inhouse_owner_is_the_booker_not_the_requester(con):
+    comp(con, 1, 100889, "2024-06-10")
+    book(con, 1, 100889, "2024-06-10", booker=900, booker_name="Raghav Bansal", owner=800, owner_name="Chetana Rountree")
+    p = place_students(con, build_lines(con, TODAY))[1]
+    assert (p.card_key, p.kind, p.target_contact_id, p.target_name) == ("B:800", "booker", 800, "Chetana Rountree")
+
+
+def test_inhouse_owner_fills_in_when_no_requester_is_recorded(con):
+    comp(con, 1, 100889, "2024-06-10"); book(con, 1, 100889, "2024-06-10", owner=800, owner_name="Chetana Rountree")
+    assert place_students(con, build_lines(con, TODAY))[1].card_key == "B:800"
+
+
+@pytest.mark.parametrize("owner_org", ["Kallibr Training", "kallibr training (QLD)", "GL Training"])
+def test_kallibr_owner_is_ignored(con, owner_org):
+    comp(con, 1, 100889, "2024-06-10")
+    book(con, 1, 100889, "2024-06-10", booker=900, booker_name="Raghav Bansal", owner=800, owner_name="NSW Scheduling",
+         owner_org=owner_org)
+    assert place_students(con, build_lines(con, TODAY))[1].card_key == "B:900"
+
+
+def test_owner_who_is_kallibr_staff_by_name_is_ignored(con):
+    staff_entries(con, "Aiyaz Hussein", n=50)
+    comp(con, 1, 100889, "2024-06-10")
+    book(con, 1, 100889, "2024-06-10", booker=900, booker_name="Raghav Bansal", owner=800, owner_name="Aiyaz Hussein",
+         owner_org="Gold Coast City Council")
+    assert place_students(con, build_lines(con, TODAY))[1].card_key == "B:900"
+
+
+def test_owner_on_the_ignore_list_is_ignored(con):
+    comp(con, 1, 100889, "2024-06-10")
+    book(con, 1, 100889, "2024-06-10", booker=900, booker_name="Raghav Bansal", owner=800, owner_name="Chetana Rountree")
+    assert place_students(con, build_lines(con, TODAY), ignore_ids=(800,))[1].card_key == "B:900"
+
+
+def test_public_class_owner_is_not_used(con):
+    comp(con, 1, 100889, "2024-06-10")
+    book(con, 1, 100889, "2024-06-10", booker=900, booker_name="Raghav Bansal", owner=800, owner_name="Chetana Rountree",
+         coordination="Public Workshop")
+    assert place_students(con, build_lines(con, TODAY))[1].card_key == "B:900"
+
+
+def test_student_who_owns_their_inhouse_class_is_individual(con):
+    comp(con, 1, 100889, "2024-06-10")
+    book(con, 1, 100889, "2024-06-10", booker=900, booker_name="Raghav Bansal", owner=1, owner_name="Student 1")
+    assert place_students(con, build_lines(con, TODAY))[1].card_key == "S:1"
+
+
 # ---- Current booking contact (docs/superpowers/specs/2026-11-18-current-booker-design.md) ----
 
 def place(con, **kw):
@@ -175,3 +224,11 @@ def test_active_booker_keeps_a_student_in_a_state_nobody_books_for_now(con):
     recent(con, 50, 901, "Therese Stapleton", loc="QLD")
     recent(con, 51, 902, "Kavita Dsilva", loc="NSW"); recent(con, 52, 902, "Kavita Dsilva", loc="NSW")   # busier overall
     assert place(con)[1].card_key == "B:901"
+
+
+def test_inhouse_owner_counts_as_the_current_booker(con):
+    due(con, 1, 900, "Kim Spicer")                     # quiet for a year
+    book(con, 50, 555, "2026-10-20", booker=901, booker_name="Raghav Bansal", booked_on="2026-10-01",
+         owner=802, owner_name="Chetana Rountree")
+    p = place(con)[1]
+    assert (p.card_key, p.target_name) == ("B:802", "Chetana Rountree")

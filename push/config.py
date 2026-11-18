@@ -17,6 +17,7 @@ INDIVIDUAL_ORG_PREFIX = "Cash - Individual"
 STAFF_ENTERED_MIN = 50                 # a requester who entered this many bookings is Kallibr staff
 CURRENT_BOOKER_MONTHS = 12             # a booker counts as current if they booked for the company within this
 IGNORE_BOOKER_CONTACT_IDS = ()         # extra contact IDs never treated as bookers
+STAFF_ORG_PREFIXES = ("Kallibr", "GL Training")   # an in-house class owner from these organisations is Kallibr staff
 
 # Monday call-back email (sent by the nightly push on the designated PC)
 SITE_URL = "https://linok123.github.io/kallibr-refresher-calls/"
