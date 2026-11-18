@@ -12,10 +12,10 @@ Refreshers fall due about two years after a course, and by then the person who b
 
 A student's first-pass card comes from spec 5.3 as today. Then, for a student whose organisation is a real company (not blank, not "Cash - Individual"):
 
-1. **Booker card, booker still active:** if that booker has made a real booking for the company in the last 12 months, the student stays on that booker's card. A booking is in the window when its booked date (or, if missing, its class start date) is on or after today minus 12 months.
-2. **Booker card with a quiet booker, or an organisation card:** the student goes to the company's **current booker for the student's state**. That's the requester with the most real bookings for that company at classes in that state in the last 12 months, any course. Ties go to the latest booking, then to the lowest contact ID.
-   - If nobody booked for the company in that state, use the company's busiest booker in any state, chosen the same way.
-   - If nobody booked for the company at all in the last 12 months, the first-pass card stands.
+1. **Booker still books that state:** if the original booker has made a real booking for the company **at a class in the student's state** in the last 12 months, the student stays on that booker's card. A booking is in the window when its booked date (or, if missing, its class start date) is on or after today minus 12 months. *(Refined by the owner the same day: "split by state". Originally any state counted, which left two of Therese's NSW students on her QLD card.)*
+2. **Otherwise, the state's current booker** takes the student: the requester with the most real bookings for that company at classes in that state in the last 12 months, any course. Ties go to the latest booking, then to the lowest contact ID.
+3. **If nobody books for the company in that state now,** the original booker keeps the student, as long as they still book for the company in some state.
+4. **Otherwise, the company's busiest current booker** in any state, chosen as in rule 2. If nobody booked for the company at all in the last 12 months, the first-pass card stands. Students on organisation cards go through rules 2 and 4.
 3. **Individual cards** (self-bookers, blank or cash organisations) are unchanged.
 
 "Requester", "real booking" and "Kallibr staff are not bookers" keep their spec 5.3 meanings: staff names and the ignore list never become a current booker, and neither does a student who booked themselves. After this step, the existing "one person, one card" merge and sticky placement apply as before: a student with a logged call never moves.

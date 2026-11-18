@@ -161,3 +161,17 @@ def test_current_booker_who_is_also_due_gets_one_card(con):
     placed = place(con)
     assert placed[1].card_key == placed[901].card_key == "B:901"
     assert placed[901].target_name == "Therese Stapleton"
+
+
+def test_active_booker_keeps_only_students_in_states_they_still_book_for(con):
+    due(con, 1, 901, "Therese Stapleton", loc="NSW"); due(con, 2, 901, "Therese Stapleton", loc="QLD")
+    recent(con, 50, 901, "Therese Stapleton", loc="QLD"); recent(con, 51, 902, "Kavita Dsilva", loc="NSW")
+    placed = place(con)
+    assert (placed[1].card_key, placed[2].card_key) == ("B:902", "B:901")
+
+
+def test_active_booker_keeps_a_student_in_a_state_nobody_books_for_now(con):
+    due(con, 1, 901, "Therese Stapleton", loc="VIC")
+    recent(con, 50, 901, "Therese Stapleton", loc="QLD")
+    recent(con, 51, 902, "Kavita Dsilva", loc="NSW"); recent(con, 52, 902, "Kavita Dsilva", loc="NSW")   # busier overall
+    assert place(con)[1].card_key == "B:901"

@@ -237,8 +237,12 @@ def place_students(con: sqlite3.Connection, lines: list[Line],
         else:
             placed[cid] = Placement(cid, f"S:{cid}", "individual", cid, l.student_name, org_name, org_key)
 
-    # Current booking contact: replace a quiet booker (or an organisation card) with whoever books
-    # for the company now in the student's state, else the company's busiest current booker.
+    # Current booking contact, per company and state:
+    #   1. the original booker keeps the student if they booked for the company in that state lately;
+    #   2. otherwise the state's current booker takes them;
+    #   3. if nobody books the company in that state now, the original booker keeps them while they
+    #      still book for the company anywhere;
+    #   4. otherwise the company's busiest current booker. Organisation cards go through 2 and 4.
     if today is not None:
         by_state, by_org, active, latest_when, names = _current_bookers(con, today, staff, ignore)
 
@@ -250,11 +254,15 @@ def place_students(con: sqlite3.Connection, lines: list[Line],
         for cid, p in list(placed.items()):
             if p.kind == "individual" or not p.org_key:
                 continue
-            if p.kind == "booker" and (p.org_key, p.target_contact_id) in active:
-                continue
             state = latest[cid].location
-            who = pick(by_state.get((p.org_key, state)), (p.org_key, state))
+            mine = p.target_contact_id if p.kind == "booker" else None
+            state_bookers = by_state.get((p.org_key, state))
+            if mine is not None and state_bookers and mine in state_bookers:
+                continue
+            who = pick(state_bookers, (p.org_key, state))
             if who is None:
+                if mine is not None and (p.org_key, mine) in active:
+                    continue
                 who = pick(by_org.get(p.org_key), (p.org_key, None))
             if who is not None:
                 placed[cid] = Placement(cid, f"B:{who}", "booker", who, names.get(who) or f"Contact {who}",
