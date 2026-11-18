@@ -220,3 +220,44 @@ def place_students(con: sqlite3.Connection, lines: list[Line],
             placed[p.contact_id] = Placement(p.contact_id, key, lead.kind, lead.target_contact_id,
                                              lead.target_name, lead.org_name, lead.org_key)
     return placed
+
+
+@dataclass(frozen=True)
+class LineCheck:
+    contact_id: int
+    refresher_type: str
+    last_done: date
+    in_window: bool
+    won: bool
+    booked_on: date | None
+    class_date: date | None
+    course_name: str | None
+    tentative: bool
+
+
+def check_lines(con: sqlite3.Connection, keys: list[tuple[int, str, date]], today: date) -> list[LineCheck]:
+    """Win, tentative and window state for each line key (spec 5.5), in the order given."""
+    types = type_map(con)
+    by_type = _by_contact_type(_bookings(con, types), types)
+    earliest = add_months(today, -12 * config.LOOKBACK_YEARS)
+    out = []
+    for cid, t, last in keys:
+        theirs = by_type.get((cid, t), [])
+        real = sorted((b for b in theirs if b.counted and b.start_date > last),
+                      key=lambda b: (b.start_date, b.booking_id))
+        tentative = any(b.status in config.TENTATIVE_STATUSES and b.start_date >= today and b.start_date > last
+                        for b in theirs)
+        first = real[0] if real else None
+        out.append(LineCheck(cid, t, last, last >= earliest, first is not None,
+                             first.booked_on if first else None, first.start_date if first else None,
+                             first.course if first else None, tentative))
+    return out
+
+
+def course_history(con: sqlite3.Connection, contact_ids: set[int]) -> list[tuple[int, str, date]]:
+    """Every Kallibr course each student completed: (contact_id, course_name, completed_on), distinct."""
+    rows = set()
+    for cid, course, on in con.execute("select contact_id, course_name, completed_on from v_completions"):
+        if cid is not None and int(cid) in contact_ids and course and on:
+            rows.add((int(cid), course, _d(on)))
+    return sorted(rows)
