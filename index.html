@@ -876,7 +876,7 @@ const esc = RC.esc;
 const S = {
   sb: null, me: null, cards: [], staff: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
   cardData: null, cardNotice: null, cardView: null,
-  filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, queueSort: { key: null, dir: null },
+  filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, queueSort: { key: null, dir: null }, mineSort: { key: null, dir: null },
   entering: false,
 };
 const today = () => RC.sydneyToday(new Date());
@@ -983,12 +983,12 @@ function cardRow(c, actions) {
 }
 const CARD_COLUMNS = [['name', 'Booker or student', ''], ['org', 'Organisation', ''], ['state', 'State', ''],
                       ['open', 'Refreshers', 'num'], ['overdue', 'Overdue', 'num'], ['due', 'Earliest due', '']];
-// sort: the current {key, dir} when the headers can sort (the Queue); omitted for plain headers (My cards)
-function cardTable(rows, pager, sort) {
+// sort: the current {key, dir} when the headers can sort; act: the click action ('queue-sort' or 'mine-sort')
+function cardTable(rows, pager, sort, act = 'queue-sort') {
   const head = CARD_COLUMNS.map(([key, label, cls]) => {
     if (!sort) return `<th class="${cls}">${label}</th>`;
     const on = sort.key === key;
-    return `<th class="sortable ${cls}" data-act="queue-sort" data-sort="${key}" title="Sort by ${label.toLowerCase()}"
+    return `<th class="sortable ${cls}" data-act="${act}" data-sort="${key}" title="Sort by ${label.toLowerCase()}"
       aria-sort="${on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${label}${on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
   }).join('');
   return `<div class="table-wrap"><div class="table-scroll"><table class="table">
@@ -1037,14 +1037,17 @@ function clearQueueFilters() {
 // ---------- my cards ----------
 function renderMine() {
   if (!S.me) return;
-  const list = RC.myCards(S.cards, S.me.id, today());
+  // usual order: call-backs due first, then biggest; a clicked column overrides it until its third click
+  const usual = RC.myCards(S.cards, S.me.id, today());
+  const list = S.mineSort.key ? RC.sortCards(usual, S.mineSort.key, S.mineSort.dir) : usual;
   if (!list.length) {
     $('mine-table').innerHTML = emptyState('🗂️', "You haven't taken any cards yet. Pick one from the Queue.");
     return;
   }
   $('mine-table').innerHTML = cardTable(list.map((c) => cardRow(c,
     `<button class="btn-primary btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button>
-     <button class="btn-ghost btn-sm" data-act="release" data-key="${esc(c.card_key)}">Release</button>`)).join(''));
+     <button class="btn-ghost btn-sm" data-act="release" data-key="${esc(c.card_key)}">Release</button>`)).join(''),
+    null, S.mineSort, 'mine-sort');
 }
 
 // ---------- actions ----------
@@ -1766,6 +1769,7 @@ document.addEventListener('click', (e) => {
     case 'page': S.queuePage = Math.max(0, +btn.dataset.page); renderQueue(); break;
     case 'queue-sort': S.queueSort = RC.nextSort(S.queueSort, btn.dataset.sort); S.queuePage = 0; renderQueue(); break;
     case 'queue-clear': clearQueueFilters(); break;
+    case 'mine-sort': S.mineSort = RC.nextSort(S.mineSort, btn.dataset.sort); renderMine(); break;
     case 'signout': signOut(); break;
     case 'signin-restart': restartSignIn(); break;
     default: if (typeof onAction === 'function') onAction(btn.dataset.act, btn, e);
