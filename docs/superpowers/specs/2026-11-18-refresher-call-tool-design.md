@@ -151,7 +151,7 @@ Every night, for each line that is not already won, the push looks for a real bo
 - **Filters:** state, refresher type, due status (overdue / due within 4 months), card type, and a search on organisation or booker name.
 - **Take:** a staff member claims a card. The claim is atomic: if two people click at once, one gets it and the other is told it has been taken.
 - **Release:** the owner can hand a card back to the queue.
-- **Auto-release:** a claimed card with no activity for 14 days and no future call-back date returns to the queue.
+- **Auto-release:** a claimed card with no activity for 14 days and no future call-back date returns to the queue. A card a manager assigned waits 28 days instead. What counts is how the current holder got it last, so an assigned card that was released and then taken is back on 14. *(Owner's request, 18 Nov 2026: migration 0006.)*
 - **Managers** can assign or reassign any card to a named staff member.
 - **My cards:** the staff member's claimed cards, with call-backs due today or earlier at the top.
 

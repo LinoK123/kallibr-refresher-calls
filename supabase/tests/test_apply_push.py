@@ -214,6 +214,28 @@ def test_auto_release_after_14_days(cur):
                       "and staff_id = %s", (jo,)) == 1
 
 
+def test_assigned_cards_auto_release_after_28_days(cur):
+    """Owner's request, 18 Nov 2026: a card a manager assigned waits 28 days, a card someone took waits 14.
+    What counts is the holder's latest take: an assigned card that was released and then taken is a taken card."""
+    jo = add_staff(cur, JO); add_staff(cur, MEL, role="manager"); as_service(cur)
+    apply(cur, stage(cur, students=[st(1, "B:900"), st(2, "B:901"), st(3, "B:902"), st(4, "B:903")],
+                     lines=[ln(1), ln(2), ln(3), ln(4)]))
+    as_user(cur, MEL)
+    for k in ("B:900", "B:901", "B:903"):
+        cur.execute("select assign_card(%s, %s)", (k, jo))
+    as_user(cur, JO)
+    cur.execute("select release_card('B:903')")
+    claim(cur, JO, "B:903")
+    claim(cur, JO, "B:902")
+    with as_owner(cur):
+        cur.execute("update cards set last_activity_at = now() - interval '20 days' where card_key in ('B:900', 'B:902', 'B:903')")
+        cur.execute("update cards set last_activity_at = now() - interval '29 days' where card_key = 'B:901'")
+    as_service(cur)
+    out = apply(cur, stage(cur))
+    assert [card(cur, k)["claimed_by"] for k in ("B:900", "B:901", "B:902", "B:903")] == [jo, None, None, None]
+    assert out["released"] == 3
+
+
 def test_call_history_is_never_deleted(cur):
     add_staff(cur, JO); as_service(cur)
     apply(cur, stage(cur, students=S, lines=L))
