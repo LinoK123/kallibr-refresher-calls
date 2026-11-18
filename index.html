@@ -731,7 +731,18 @@ const RC = (() => {
     return `That sign-in didn't work: ${p.error_description || p.error_code || p.error}`;
   }
 
-  return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
+  // Why a sign-in code couldn't be sent, by Supabase's error code.
+  function signInError(code, message) {
+    if (code === 'otp_disabled') return "That email isn't set up for this tool. Ask your manager.";
+    if (code === 'signup_disabled') {
+      return "Your sign-in hasn't been activated yet. Ask your manager to activate it "
+        + '(Supabase → Authentication → Users), then try again.';
+    }
+    if (/rate_limit/.test(code || '')) return 'Too many codes have been asked for just now. Wait a minute and try again.';
+    return `Couldn't send the code: ${message}`;
+  }
+
+  return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, signInError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
            queueCards, myCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
@@ -1436,9 +1447,7 @@ async function sendCode(ev) {
   });
   $('signin-btn').disabled = false;
   if (error) {
-    msg.textContent = /signup|not allowed|not found/i.test(error.message)
-      ? "That email isn't set up for this tool. Ask your manager."
-      : `Couldn't send the code: ${error.message}`;
+    msg.textContent = RC.signInError(error.code, error.message);
     return;
   }
   S.signinEmail = email;

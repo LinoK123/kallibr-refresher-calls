@@ -17,8 +17,17 @@ A shared call list for Kallibr staff to ring bookers about overdue and upcoming 
 ## Adding, changing or removing a team member
 
 1. **Admin page → + Add team member:** name, Kallibr email, role (Staff or Manager), Active ticked.
-2. **Supabase → Authentication → Users → Add user → Send invitation**, with the same email. Sign-ups are switched off, so this is the only way in.
-3. They go to the site, enter their work email, click **Email me a sign-in code**, and type the code from the email. The invitation email only points them to the site. Sign-in uses typed codes rather than links because Microsoft 365's email security scanners open links in incoming mail, which uses up one-time sign-in links before the person clicks (seen at go-live).
+2. **Supabase → Authentication → Users → Add user → Create new user:** their email, any long random password (it is never used; don't keep it), and **Auto Confirm User** ticked. Sign-ups are switched off, so this is the only way in.
+3. Send them the site address. They enter their work email, click **Email me a sign-in code**, and type the code from the email. Sign-in uses typed codes rather than links because Microsoft 365's email security scanners open links in incoming mail, which uses up one-time sign-in links before the person clicks (seen at go-live).
+
+**Don't use "Send invitation".** An invited account stays unconfirmed until the invitation is accepted. With sign-ups off, Supabase then refuses to send that person a code, and the site says their sign-in "hasn't been activated yet". To activate someone who was invited, run this in the SQL Editor:
+
+```sql
+update auth.users set email_confirmed_at = now()
+where email = '<their email, lower-case>' and email_confirmed_at is null;
+```
+
+This is safe: they still need the code that goes to their own mailbox to sign in.
 
 To remove someone, open **Admin → Edit**, untick **Active** and save. Their cards go straight back to the queue and they see nothing on their next request. You can also delete their user under Authentication → Users. You can't remove your own manager access, so another manager has to do that.
 
@@ -49,7 +58,7 @@ The emails must carry a **code** (`{{ .Token }}`), never `{{ .ConfirmationURL }}
   <p>Type it on the sign-in page. It works once, for one hour. If you didn't ask for it, you can ignore this email.</p>
   ```
 
-- **Invite user**, with the subject `You've been added to Kallibr Refresher Calls` and this body:
+- **Invite user** (only used if someone is invited rather than created; see above), with the subject `You've been added to Kallibr Refresher Calls` and this body:
 
   ```html
   <h2>Refresher Calls</h2>

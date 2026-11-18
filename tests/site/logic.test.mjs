@@ -275,3 +275,10 @@ test('sortGroups by each column, both directions, keeping a student\'s rows toge
   assert.deepEqual(plain(RC.sortGroups(g, 'student', 'asc')[1].rows.map((r) => r.id)), [1, 2], 'rows inside a student keep their order');
   assert.deepEqual(plain(g.map((x) => x.contact_id)), [1, 2, 3], 'does not reorder its input');
 });
+
+test('signInError tells "no account" apart from "account not activated yet"', () => {
+  assert.match(RC.signInError('otp_disabled', 'Signups not allowed for otp'), /isn't set up for this tool/);
+  assert.match(RC.signInError('signup_disabled', 'Signups not allowed for this instance'), /hasn't been activated/);
+  assert.match(RC.signInError('over_email_send_rate_limit', 'Email rate limit exceeded'), /wait/i);
+  assert.equal(RC.signInError(undefined, 'Something odd'), "Couldn't send the code: Something odd");
+});
