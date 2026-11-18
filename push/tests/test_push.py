@@ -213,3 +213,45 @@ def test_cli_exit_code_is_1_when_aborted(con, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(refresher_push, "_now", lambda: NOW)
     assert refresher_push.main(["--db", str(tmp_path / "t.db")]) == 1
     assert "aborted" in capsys.readouterr().out
+
+
+# ---- Final review, issue 1: a bad night must not mass-reverse wins ----
+
+def won_line(cid):
+    return {"contact_id": cid, "refresher_type": "Heights", "last_done": "2024-06-10", "status": "won"}
+
+
+def test_mass_reversal_aborts_and_records(con):
+    fake = FakeClient(lines=[won_line(c) for c in range(100, 111)])     # 11 wins whose bookings have vanished
+    set_synced(con, NOW); students(con, 1)
+    out = run(con, fake, TODAY, NOW)
+    assert out["result"] == "aborted" and "11 won refreshers" in out["message"] and "--allow-reversals" in out["message"]
+    assert fake.inserted("sync_runs")[0]["result"] == "aborted"
+    assert fake.inserted("stage_lines") == [] and fake.rpc_calls == []
+
+
+def test_ten_reversals_proceed(con):
+    fake = FakeClient(lines=[won_line(c) for c in range(100, 110)])
+    set_synced(con, NOW); students(con, 1)
+    assert run(con, fake, TODAY, NOW)["result"] == "ok"
+
+
+def test_reversal_limit_scales_with_wins(con):
+    fake = FakeClient(lines=[won_line(c) for c in range(100, 500)])     # 400 wins → limit 20
+    set_synced(con, NOW); students(con, 1)
+    for cid in range(100, 485):                                          # 385 still booked, 15 reversing
+        book(con, cid, 100889, "2026-12-01")
+    assert run(con, fake, TODAY, NOW)["result"] == "ok"
+
+
+def test_allow_reversals_overrides_the_stop(con):
+    fake = FakeClient(lines=[won_line(c) for c in range(100, 111)])
+    set_synced(con, NOW); students(con, 1)
+    assert run(con, fake, TODAY, NOW, allow_reversals=True)["result"] == "ok"
+
+
+def test_dry_run_shows_a_mass_reversal_without_writing(con):
+    fake = FakeClient(lines=[won_line(c) for c in range(100, 111)])
+    set_synced(con, NOW); students(con, 1)
+    out = run(con, fake, TODAY, NOW, dry_run=True)
+    assert out["result"] == "aborted" and fake.writes == []

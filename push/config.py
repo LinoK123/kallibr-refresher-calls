@@ -19,4 +19,8 @@ IGNORE_BOOKER_CONTACT_IDS = ()         # extra contact IDs never treated as book
 
 MAX_SOURCE_AGE_HOURS = 36
 MAX_LINE_DROP = 0.20
+# A night that would take back more wins than this is treated as bad data and stopped:
+# more than max(MAX_REVERSALS_MIN, MAX_REVERSAL_SHARE x current wins). Override with --allow-reversals.
+MAX_REVERSALS_MIN = 10
+MAX_REVERSAL_SHARE = 0.05
 CHUNK = 500

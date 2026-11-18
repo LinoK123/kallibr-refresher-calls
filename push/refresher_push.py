@@ -100,7 +100,8 @@ def _chunks(rows, n):
         yield rows[i:i + n]
 
 
-def run(con: sqlite3.Connection, client, today: date, now: datetime, dry_run: bool = False) -> dict:
+def run(con: sqlite3.Connection, client, today: date, now: datetime, dry_run: bool = False,
+        allow_reversals: bool = False) -> dict:
     out = {"result": None, "message": "", "lines": 0, "students": 0, "checks": 0, "history": 0}
 
     # 1. Safety stop: stale local database.
@@ -121,10 +122,22 @@ def run(con: sqlite3.Connection, client, today: date, now: datetime, dry_run: bo
 
     # 4. Checks for every line we push and every line already in Supabase; history for every student.
     keys = {(l.contact_id, l.refresher_type, l.last_done): None for l in lines}
-    for e in client.select("lines", "contact_id,refresher_type,last_done"):
-        keys.setdefault((int(e["contact_id"]), e["refresher_type"], date.fromisoformat(e["last_done"])), None)
+    won_now = set()
+    for e in client.select("lines", "contact_id,refresher_type,last_done,status"):
+        key = (int(e["contact_id"]), e["refresher_type"], date.fromisoformat(e["last_done"]))
+        keys.setdefault(key, None)
+        if e.get("status") == "won":
+            won_now.add(key)
     checks = check_lines(con, list(keys), today)
     history = course_history(con, set(placed))
+
+    # Safety stop: a partial or filtered bookings sync would take back wins wholesale.
+    reversing = sum(1 for c in checks if not c.won and (c.contact_id, c.refresher_type, c.last_done) in won_now)
+    limit = max(config.MAX_REVERSALS_MIN, config.MAX_REVERSAL_SHARE * len(won_now))
+    if reversing > limit and not allow_reversals:
+        return _abort(client, out, f"Refusing to push: {reversing} won refreshers would lose their booking "
+                                   f"(limit {limit:.0f}). Check the local bookings data; if it is right, run "
+                                   "py refresher_push.py --allow-reversals.", synced, now, dry_run)
 
     latest = {}
     for l in lines:
@@ -200,6 +213,8 @@ def main(argv=None) -> int:
     ap.add_argument("--db", default=str(DEFAULT_DB), help="path to axc_agent.db (opened read-only)")
     ap.add_argument("--dry-run", action="store_true", help="work everything out, write nothing")
     ap.add_argument("--set-key", action="store_true", help="store the Supabase URL and secret key")
+    ap.add_argument("--allow-reversals", action="store_true",
+                    help="push even though many won refreshers would lose their booking (after checking)")
     a = ap.parse_args(argv)
     if a.set_key:
         set_key()
@@ -213,7 +228,7 @@ def main(argv=None) -> int:
     try:
         now = _now()
         try:
-            out = run(con, Client(url, key), now.date(), now, dry_run=a.dry_run)
+            out = run(con, Client(url, key), now.date(), now, dry_run=a.dry_run, allow_reversals=a.allow_reversals)
         except PushError as e:
             out = {"result": "failed", "message": str(e)[:500], "lines": 0, "students": 0, "checks": 0, "history": 0}
     finally:
