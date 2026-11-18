@@ -1,4 +1,8 @@
-"""Database tests run against the TEST Supabase project only.
+"""Database tests run against a separate, EMPTY test Supabase project only.
+
+They begin by dropping and recreating every tool table (reset.sql), so they refuse to run
+against any database that holds staff, refreshers or call history (see assert_disposable).
+As of 18 Nov 2026 there is no test project: the only project is live, so these tests are not run.
 
 Connection string: env REFRESHER_TEST_DB_URL, else Windows Credential Manager
 (kallibr-refresher-test / db_url, stored by set_test_db_url.py).
@@ -32,9 +36,36 @@ def _db_url():
     return url
 
 
+REAL_DATA_TABLES = ("staff", "lines", "call_logs", "line_outcomes")
+
+
+def real_data_counts(conn) -> dict:
+    """Rows in the tables that only real use fills. Read-only."""
+    counts = {}
+    for t in REAL_DATA_TABLES:
+        if conn.execute("select to_regclass(%s) is not null", (f"public.{t}",)).fetchone()[0]:
+            counts[t] = conn.execute(f"select count(*) from public.{t}").fetchone()[0]
+    return counts
+
+
+def assert_disposable(url):
+    """These tests start by DROPPING every tool table. Refuse unless the target holds no real data:
+    a project with staff, refreshers or call history is a live project, whatever it is called."""
+    with psycopg.connect(url, autocommit=True) as c:
+        found = {t: n for t, n in real_data_counts(c).items() if n}
+    if found:
+        raise RuntimeError("Refusing to run the database tests: the target database holds real data "
+                           f"({', '.join(f'{n} {t}' for t, n in found.items())}). These tests wipe it. "
+                           "Point REFRESHER_TEST_DB_URL at a separate, empty test project.")
+
+
 @pytest.fixture(scope="session")
 def db_url():
     url = _db_url()
+    try:
+        assert_disposable(url)
+    except RuntimeError as e:
+        pytest.exit(str(e), returncode=2)
     with psycopg.connect(url, autocommit=True) as c:
         c.execute((ROOT / "reset.sql").read_text(encoding="utf-8"))
         for f in sorted((ROOT / "migrations").glob("*.sql")):
