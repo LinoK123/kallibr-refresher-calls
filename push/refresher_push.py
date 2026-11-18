@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config  # noqa: E402
 import callback_digest  # noqa: E402
+import manager_report  # noqa: E402
 from rules import build_lines, check_lines, course_history, place_students  # noqa: E402
 from supabase_client import Client, PushError  # noqa: E402
 
@@ -243,6 +244,26 @@ def send_call_back_emails(client, today: date, marker_path: Path, force: bool = 
         return f"Call-back emails failed: {type(e).__name__}: {str(e)[:200]}"
 
 
+def manager_report_cli(a, client, today: date, marker: Path) -> int:
+    """--manager-report: last week's team report to every active manager (or a preview with --dry-run)."""
+    if a.dry_run:
+        subject, text, _ = manager_report.render(manager_report.collect(client, today))
+        print(f"Manager report preview (nothing sent). To: {', '.join(manager_report.managers(client)) or '(no active managers)'}")
+        print(f"Subject: {subject}\n\n{text}")
+        return 0
+    creds = email_credentials()
+    if not creds:
+        print("Manager report not set up (run: py refresher_push.py --set-email)")
+        return 1
+    try:
+        print(manager_report.run_report(client, today, marker, callback_digest.smtp_sender(*creds),
+                                        force=a.force, only=a.to))
+    except Exception as e:
+        print(f"Manager report failed: {type(e).__name__}: {str(e)[:200]}")
+        return 1
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Push refresher lines and cards to Supabase.")
     ap.add_argument("--db", default=str(DEFAULT_DB), help="path to axc_agent.db (opened read-only)")
@@ -250,10 +271,28 @@ def main(argv=None) -> int:
     ap.add_argument("--set-key", action="store_true", help="store the Supabase URL and secret key")
     ap.add_argument("--set-email", action="store_true", help="store the Gmail sender and app password")
     ap.add_argument("--send-digest", action="store_true", help="send this week's call-back emails now (no push)")
-    ap.add_argument("--to", help="with --send-digest: send only to this address")
+    ap.add_argument("--manager-report", action="store_true", help="email last week's team report to the managers (no push)")
+    ap.add_argument("--force", action="store_true", help="with --manager-report: send even if this week's has gone")
+    ap.add_argument("--to", help="with --send-digest or --manager-report: send only to this address")
+    ap.add_argument("--log", help="append everything printed to this file (for scheduled runs)")
     ap.add_argument("--allow-reversals", action="store_true",
                     help="push even though many won refreshers would lose their booking (after checking)")
     a = ap.parse_args(argv)
+    if a.log:
+        import contextlib
+        with open(a.log, "a", encoding="utf-8") as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+            what = "manager report" if a.manager_report else "refresher push"
+            print(f"\n=== {_now():%Y-%m-%d %H:%M} {what} ===")
+            try:
+                return _main(a)
+            except Exception:                         # scheduled runs have no console: keep the reason in the log
+                import traceback
+                traceback.print_exc()
+                return 1
+    return _main(a)
+
+
+def _main(a) -> int:
     if a.set_key:
         set_key()
         return 0
@@ -266,6 +305,8 @@ def main(argv=None) -> int:
     if a.send_digest:
         print(send_call_back_emails(Client(url, key), _now().date(), marker, force=True, only=a.to))
         return 0
+    if a.manager_report:
+        return manager_report_cli(a, Client(url, key), _now().date(), db.parent / config.REPORT_MARKER)
     if not db.exists():
         print(f"Refresher push failed: no database at {db}")
         return 1

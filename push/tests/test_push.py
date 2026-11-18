@@ -329,3 +329,67 @@ def test_email_credentials_from_env(monkeypatch):
     monkeypatch.setenv("REFRESHER_EMAIL_USER", "sender@gmail.com")
     monkeypatch.setenv("REFRESHER_EMAIL_PASSWORD", "pw")
     assert refresher_push.email_credentials() == ("sender@gmail.com", "pw")
+
+
+# ---- Monday manager report wiring ----
+
+@pytest.fixture
+def report_cli(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(refresher_push, "credentials", lambda: ("https://x.supabase.co", "k"))
+    monkeypatch.setattr(refresher_push, "Client", lambda url, key: FakeClient())
+    monkeypatch.setattr(refresher_push, "_now", lambda: NOW)
+    monkeypatch.setattr(refresher_push, "email_credentials", lambda: ("sender@gmail.com", "app-pw"))
+
+    def fake_run_report(client, today, marker_path, sender, force=False, only=None):
+        calls.append(dict(today=today, marker=marker_path, force=force, only=only))
+        return "Manager report: 3 sent, 0 failed"
+    monkeypatch.setattr(refresher_push.manager_report, "run_report", fake_run_report)
+    return calls, tmp_path
+
+
+def test_manager_report_flag_sends_and_skips_the_push(report_cli, capsys):
+    calls, tmp = report_cli
+    assert refresher_push.main(["--db", str(tmp / "axc_agent.db"), "--manager-report"]) == 0
+    assert calls == [dict(today=TODAY, marker=tmp / config.REPORT_MARKER, force=False, only=None)]
+    assert "Manager report: 3 sent" in capsys.readouterr().out
+
+
+def test_manager_report_force_and_to(report_cli):
+    calls, tmp = report_cli
+    refresher_push.main(["--db", str(tmp / "axc_agent.db"), "--manager-report", "--force", "--to", "me@kallibr.com.au"])
+    assert calls[0]["force"] is True and calls[0]["only"] == "me@kallibr.com.au"
+
+
+def test_manager_report_dry_run_prints_without_sending(report_cli, monkeypatch, capsys):
+    calls, tmp = report_cli
+    monkeypatch.setattr(refresher_push.manager_report, "collect", lambda client, today: "REPORT")
+    monkeypatch.setattr(refresher_push.manager_report, "render", lambda r: ("Subject line", "Body text\n", "<p>html</p>"))
+    monkeypatch.setattr(refresher_push.manager_report, "managers", lambda client: ["a@kallibr.com.au", "b@kallibr.com.au"])
+    assert refresher_push.main(["--db", str(tmp / "axc_agent.db"), "--manager-report", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert calls == [] and "Subject line" in out and "Body text" in out and "a@kallibr.com.au, b@kallibr.com.au" in out
+
+
+def test_log_appends_the_output_to_a_file(report_cli, capsys):
+    calls, tmp = report_cli
+    log = tmp / "sync.log"
+    log.write_text("earlier lines\n", encoding="utf-8")
+    refresher_push.main(["--db", str(tmp / "axc_agent.db"), "--manager-report", "--log", str(log)])
+    text = log.read_text(encoding="utf-8")
+    assert text.startswith("earlier lines\n") and "manager report" in text.lower() and "Manager report: 3 sent" in text
+    assert capsys.readouterr().out == ""
+
+
+def test_log_records_an_unexpected_error(report_cli, monkeypatch, capsys):
+    """Scheduled runs use pyw (no console), so a crash must land in the log, not vanish."""
+    calls, tmp = report_cli
+
+    def broken():
+        raise RuntimeError("keyring broke")
+    monkeypatch.setattr(refresher_push, "email_credentials", broken)
+    log = tmp / "sync.log"
+    assert refresher_push.main(["--db", str(tmp / "axc_agent.db"), "--manager-report", "--log", str(log)]) == 1
+    text = log.read_text(encoding="utf-8")
+    assert "RuntimeError" in text and "keyring broke" in text
+    assert capsys.readouterr().out == ""

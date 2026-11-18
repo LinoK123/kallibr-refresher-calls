@@ -103,6 +103,8 @@ py push/refresher_push.py                    # the real push (the nightly job ru
 py push/refresher_push.py --allow-reversals  # only after checking an "aborted: ... would lose their booking" run
 py push/refresher_push.py --set-email        # once per PC: the Gmail sender + its app password, for the Monday emails
 py push/refresher_push.py --send-digest --to you@kallibr.com.au   # send this week's call-back email now, to one person
+py push/refresher_push.py --manager-report --dry-run              # preview last week's manager report, send nothing
+py push/refresher_push.py --manager-report --force --to you@kallibr.com.au   # send last week's report to one person
 ```
 
 ### Call-back emails
@@ -113,6 +115,25 @@ py push/refresher_push.py --send-digest --to you@kallibr.com.au   # send this we
 - **The sender** is the same Gmail account as the sign-in codes (already allowed in Microsoft 365). Its address and app password live in Windows Credential Manager, set with `--set-email`.
 - **In `sync.log`:** the push's last line reads "Call-back emails: n sent, n failed". "Not set up" means `--set-email` hasn't been run. An email problem never fails the push.
 - `--send-digest` sends this week's emails straight away (all of them, or just `--to` one address) without a push. With `--to`, it doesn't count as this week's send.
+
+### Monday manager report
+
+- **Who gets it:** every active team member whose role is **manager** (Admin → Team). Changing someone's role or making them inactive changes the list from the next send.
+- **What it covers:** the previous Monday-to-Sunday week, in Sydney time.
+  - **Inputs:** calls logged, refreshers worked (outcomes recorded in those calls) and cards taken (claimed or assigned).
+  - **Outputs:** refreshers won (credited to staff, or booked without a call), lost, and the win rate.
+  - **The list now:** refreshers still open, cards in the Queue and held, new refreshers added last week, and call-backs overdue.
+  - **One row per active team member:** people with no activity are still listed. "–" means no wins or losses yet.
+- **When:** the scheduled task **Kallibr refresher manager report** runs every Monday at 9:00 am and wakes a sleeping PC. If the PC is off, it runs at the next sign-in. A run later in the week still reports the previous week, so a missed Monday sends on Tuesday.
+- **The task's action:** `pyw.exe -3 "<repository>\push\refresher_push.py" --manager-report --log "%USERPROFILE%\KallibrAgent\sync.log"`. Its working folder is `<repository>\push`. It needs no push and no sync.
+- **Never twice a week:** `KallibrAgent\refresher_report_week.txt` holds the Monday of the week last reported. Delete it to let this week send again, or use `--force`. If every send fails, the file isn't written, so the next run tries again.
+- **In `sync.log`:** a block headed "=== date time manager report ===" ends with "Manager report: n sent, n failed" (with the failed addresses), "already sent this week", or the error. "Not set up" means `--set-email` hasn't been run.
+- **Options:**
+  - `--dry-run` prints the report and its recipients and sends nothing.
+  - `--to` sends to one address only and doesn't count as this week's send.
+  - `--force` sends even if this week's has gone.
+  - `--log PATH` appends everything to a file and prints nothing.
+- **Moving PCs:** export the task, or re-create it with the action above. Then delete it on the old PC.
 
 How it is wired on the designated PC:
 
