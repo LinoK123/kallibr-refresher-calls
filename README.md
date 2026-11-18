@@ -56,6 +56,13 @@ To set up or replace the Gmail sender:
 
 If the app password is ever exposed, revoke it in the Google account and create a new one.
 
+**Microsoft 365 must allow the sender.** Kallibr's Microsoft 365 treated the automated code emails from a Gmail address as phishing. They were held where only admins can see them: not in Junk, and not in the person's own quarantine. A manual email from the same Gmail account still got through. The fix (18 Nov 2026) was in Microsoft Defender → Email & collaboration → Policies & rules → Threat policies → **Tenant Allow/Block Lists → Domains & addresses → Add → Allow**, with the exact Gmail address (never all of gmail.com). If codes go missing again:
+- check that allow entry hasn't expired;
+- run **Exchange admin center → Mail flow → Message trace** on the sender and recipient;
+- release anything held in Defender → Quarantine, reporting it as not junk.
+
+If the sender address changes, the allow entry must change too.
+
 ### Email templates (Supabase → Authentication → Emails → Templates)
 
 The emails must carry a **code** (`{{ .Token }}`), never `{{ .ConfirmationURL }}`. A scanner that opens a link would use up the code too, because it is the same one-time token.
