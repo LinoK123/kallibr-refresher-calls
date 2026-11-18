@@ -1879,7 +1879,7 @@ async function sendCode(ev) {
   $('code-form').classList.remove('hidden');
   $('signin-code').value = '';
   $('signin-code').focus();
-  msg.textContent = `We've emailed a sign-in code to ${email}. It works once, for one hour. Check Junk if it isn't in your Inbox.`;
+  msg.textContent = `We've sent a code to ${email}. If it isn't in your Inbox, ask Lino for your code. It works once, for one hour.`;
 }
 async function verifyCode(ev) {
   ev.preventDefault();
