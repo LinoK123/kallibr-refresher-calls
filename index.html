@@ -384,7 +384,9 @@ a:hover{text-decoration:underline;}
   <!-- QUEUE -->
   <div id="page-queue" class="page">
     <div class="page-header">
-      <div><div class="page-title">Queue</div><div class="page-subtitle">Bookers and students due a refresher that nobody has taken yet</div></div>
+      <div><div class="page-title">Queue</div><div class="page-subtitle" id="queue-subtitle">Bookers and students due a refresher that nobody has taken yet</div></div>
+      <div class="tools-row"><label class="form-label" for="queue-who" style="margin:0">Assigned to</label>
+        <select class="form-select" id="queue-who" style="width:auto;min-width:200px"></select></div>
     </div>
     <div class="filter-row" id="queue-filters">
       <button class="pill" data-filter="state" data-value="QLD">QLD</button>
@@ -574,6 +576,9 @@ const RC = (() => {
   }
 
   const queueCards = (cards) => cards.filter((c) => !c.claimed_by && !c.do_not_call && c.open_lines > 0);
+  // The Queue's "Assigned to": 'none' = the usual queue, 'all' = every card with refreshers to call, else one holder.
+  const assignedCards = (cards, who) => cards.filter((c) => !c.do_not_call && c.open_lines > 0
+    && (who === 'all' || (who === 'none' ? !c.claimed_by : c.claimed_by === who)));
 
   // Queue column sorting. Blank values always sort last; ties fall back to the usual queue order.
   const CARD_SORT = {
@@ -910,7 +915,7 @@ const RC = (() => {
   }
 
   return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, signInError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
-           queueCards, myCards, heldCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
+           queueCards, assignedCards, myCards, heldCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
            weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort, callbackList, fmtWeekday,
@@ -934,7 +939,7 @@ const S = {
   sb: null, me: null, cards: [], staff: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
   cardData: null, cardNotice: null, cardView: null,
   filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, queueSort: { key: null, dir: null }, mineSort: { key: null, dir: null },
-  mineFilters: { state: '', type: '', due: '', kind: '', search: '' },
+  mineFilters: { state: '', type: '', due: '', kind: '', search: '' }, queueWho: 'none', mineWho: null,
   entering: false,
 };
 const today = () => RC.sydneyToday(new Date());
@@ -1066,7 +1071,15 @@ function pager(total, page) {
 }
 function renderQueue() {
   if (!S.me) return;
-  const all = RC.queueCards(S.cards);
+  const active = S.staff.filter((s) => s.active);
+  if (!['none', 'all'].includes(S.queueWho) && !active.some((s) => s.id === S.queueWho)) S.queueWho = 'none';
+  const who = S.queueWho;
+  $('queue-who').innerHTML = `<option value="none" ${who === 'none' ? 'selected' : ''}>Nobody (the queue)</option>`
+    + `<option value="all" ${who === 'all' ? 'selected' : ''}>All cards</option>`
+    + active.map((s) => `<option value="${esc(s.id)}" ${s.id === who ? 'selected' : ''}>${esc(s.full_name)}${s.id === S.me.id ? ' (you)' : ''}</option>`).join('');
+  $('queue-subtitle').textContent = who === 'none' ? 'Bookers and students due a refresher that nobody has taken yet'
+    : who === 'all' ? 'Every card with refreshers to call, taken or not' : `Cards ${staffName(who)} holds`;
+  const all = RC.assignedCards(S.cards, who);
   const list = RC.sortCards(RC.filterCards(all, S.filters), S.queueSort.key, S.queueSort.dir);
   const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   S.queuePage = Math.min(S.queuePage, pages - 1);
@@ -1075,15 +1088,19 @@ function renderQueue() {
   document.querySelectorAll('#queue-filters .pill').forEach((p) =>
     p.classList.toggle('active', S.filters[p.dataset.filter] === p.dataset.value));
   if (!all.length) {
-    $('queue-table').innerHTML = emptyState('🎉', 'Nothing in the queue: every card has been taken or finished.');
+    $('queue-table').innerHTML = emptyState(who === 'none' ? '🎉' : '🗂️', who === 'none'
+      ? 'Nothing in the queue: every card has been taken or finished.'
+      : who === 'all' ? 'No cards with refreshers to call.' : `${staffName(who)} doesn't hold any cards right now.`);
     return;
   }
   if (!list.length) {
     $('queue-table').innerHTML = emptyState('🔍', 'No cards match these filters. Clear a filter to see more.');
     return;
   }
-  const rows = list.slice(S.queuePage * PAGE_SIZE, (S.queuePage + 1) * PAGE_SIZE).map((c) => cardRow(c,
-    `<button class="btn-primary btn-sm" data-act="take" data-key="${esc(c.card_key)}">Take</button>`)).join('');
+  // unassigned cards can be taken; held ones show who has them and open instead
+  const rows = list.slice(S.queuePage * PAGE_SIZE, (S.queuePage + 1) * PAGE_SIZE).map((c) => (c.claimed_by
+    ? cardRow(c, `<button class="btn-ghost btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button>`, true)
+    : cardRow(c, `<button class="btn-primary btn-sm" data-act="take" data-key="${esc(c.card_key)}">Take</button>`))).join('');
   $('queue-table').innerHTML = cardTable(rows, pager(list.length, S.queuePage), S.queueSort);
 }
 function clearQueueFilters() {
@@ -1901,6 +1918,7 @@ $('f-kind').addEventListener('change', (e) => { S.filters.kind = e.target.value;
 $('f-search').addEventListener('input', (e) => { S.filters.search = e.target.value; S.queuePage = 0; renderQueue(); });
 $('m-kind').addEventListener('change', (e) => { S.mineFilters.kind = e.target.value; renderMine(); });
 $('mine-who').addEventListener('change', (e) => { S.mineWho = e.target.value; renderMine(); });
+$('queue-who').addEventListener('change', (e) => { S.queueWho = e.target.value; S.queuePage = 0; renderQueue(); });
 $('m-search').addEventListener('input', (e) => { S.mineFilters.search = e.target.value; renderMine(); });
 $('signin-form').addEventListener('submit', sendCode);
 $('code-form').addEventListener('submit', verifyCode);

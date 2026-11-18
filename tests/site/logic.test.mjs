@@ -390,3 +390,15 @@ test('heldCards: one person (same as myCards) or everyone, call-backs due first'
   assert.deepEqual(plain(RC.heldCards(cards, 'u2', T).map((x) => x.card_key)), ['due', 'big']);
   assert.deepEqual(plain(RC.heldCards(cards, 'me', T).map((x) => x.card_key)), plain(RC.myCards(cards, 'me', T).map((x) => x.card_key)));
 });
+
+// ---------- Queue: Assigned to ----------
+test('assignedCards: nobody (the usual queue), everyone, or one person; never do-not-call or finished cards', () => {
+  const cards = [card({ card_key: 'free' }), card({ card_key: 'jo', claimed_by: 'u1' }), card({ card_key: 'al', claimed_by: 'u2' }),
+                 card({ card_key: 'dnc', do_not_call: true }), card({ card_key: 'done', open_lines: 0 }),
+                 card({ card_key: 'jo-done', claimed_by: 'u1', open_lines: 0 })];
+  const keys = (who) => plain(RC.assignedCards(cards, who).map((c) => c.card_key));
+  assert.deepEqual(keys('none'), ['free']);
+  assert.deepEqual(keys('none'), plain(RC.queueCards(cards).map((c) => c.card_key)));
+  assert.deepEqual(keys('all'), ['free', 'jo', 'al']);
+  assert.deepEqual(keys('u1'), ['jo']);
+});

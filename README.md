@@ -8,7 +8,7 @@ A shared call list for Kallibr staff to ring bookers about overdue and upcoming 
 
 ## Day to day
 
-- **Queue:** cards nobody has taken, biggest first. Filter by state, refresher, due status, card type or name.
+- **Queue:** cards nobody has taken, biggest first. **Assigned to** switches to **All cards** (taken or not) or any team member's cards; held cards show who has them, with **Open →** instead of **Take**. Filter by state, refresher, due status, card type or name.
   - Click a column header to sort. Click again to reverse, and a third time to go back to the usual order.
   - **Take** claims a card for you; nobody else can work it until you release it.
 - **Card:** the same kind of filters, plus sortable columns, for the students on a card.
