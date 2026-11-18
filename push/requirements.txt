@@ -1,0 +1,5 @@
+requests
+keyring
+tzdata
+pytest
+psycopg[binary]
