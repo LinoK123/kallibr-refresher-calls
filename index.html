@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>Refresher Calls · Kallibr</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<style>
+/* Kallibr Design Kit: kallibr-theme.css, embedded (single-file app) */
+/* ==========================================================================
+   Kallibr theme — extracted from the Kallibr CRM / Sales Dashboard
+   Soft pastel, card-based admin UI. Fonts: DM Serif Display (headings,
+   big numbers) + DM Sans (everything else). Load in <head>:
+   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+   ========================================================================== */
+
+/* ---------- Tokens ---------- */
+:root{
+  /* Pastel pairs: light fill + stronger accent */
+  --rose:#f9c8d0;  --rose2:#f2a0b0;
+  --sage:#c8e6c8;  --sage2:#9ecf9e;
+  --sky:#bde0f7;   --sky2:#87c5ef;
+  --lav:#ddd4f0;   --lav2:#b8a9de;   /* lavender = primary brand colour */
+  --peach:#fddcb5; --peach2:#f9be7c;
+  --brand-deep:#7B68C8;              /* stronger purple for emphasis */
+  --primary-hover:#9d8dcc;
+
+  /* Surfaces & text */
+  --cream:#fdf8f2;   /* page background */
+  --white:#ffffff;   /* cards */
+  --text:#2d2d3a;    /* body text */
+  --text2:#6b6b82;   /* muted text, labels */
+  --border:#ece8f4;  /* lavender-tinted hairline */
+  --row-hover:#faf8ff;
+
+  /* Semantic (text on tint) */
+  --success:#2d7a2d; --success-bg:#edf7ed; --success-line:#9ecf9e;
+  --danger:#c0392b;  --danger-bg:#fde8e8;
+  --warning:#856404; --warning-bg:#fff3cd; --warning-strong:#e6a817;
+  --orange:#a05c00;  --orange-bg:#fddcb5;
+  --info:#1565a8;    --info-bg:#e3f0fb;
+  --purple:#5a4a8a;  --purple-bg:#ece8f7;
+
+  /* Shape & depth */
+  --shadow:0 2px 16px rgba(100,80,160,0.08);
+  --shadow2:0 8px 32px rgba(100,80,160,0.14);
+  --radius:16px;    /* banners, small panels */
+  --radius2:24px;   /* cards */
+  --radius-ctl:10px;/* buttons, inputs */
+
+  --font-display:'DM Serif Display',serif;
+  --font-body:'DM Sans',sans-serif;
+}
+
+/* ---------- Base ---------- */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font-body);background:var(--cream);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+button,input,select,textarea{font-family:var(--font-body);}
+a{color:var(--info);text-decoration:none;}
+a:hover{text-decoration:underline;}
+.num{text-align:right;font-weight:500;font-variant-numeric:tabular-nums;}
+.muted{color:var(--text2);}
+
+/* ---------- App shell: fixed sidebar + main ---------- */
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--white);border-right:1.5px solid var(--border);display:flex;flex-direction:column;z-index:100;box-shadow:2px 0 16px rgba(100,80,160,0.06);}
+.sidebar-logo{padding:26px 24px 18px;border-bottom:1.5px solid var(--border);}
+.sidebar-logo h1{font-family:var(--font-display);font-size:1.1rem;font-weight:400;color:var(--text);line-height:1.3;}
+.sidebar-logo span{display:block;font-size:0.68rem;color:var(--text2);margin-top:2px;letter-spacing:0.04em;text-transform:uppercase;}
+.sidebar-nav{padding:14px 10px;flex:1;overflow-y:auto;}
+.nav-label{font-size:0.63rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text2);padding:8px 12px 5px;opacity:0.6;}
+.nav-label + .nav-item{margin-top:0;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;font-size:0.86rem;font-weight:500;color:var(--text2);transition:all 0.16s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left;}
+.nav-item:hover{background:var(--lav);color:var(--text);}
+.nav-item.active{background:var(--lav);color:var(--text);font-weight:600;}
+.nav-item .icon{font-size:0.95rem;width:18px;text-align:center;}
+.nav-count{margin-left:auto;background:var(--warning-strong);color:#fff;border-radius:99px;font-size:0.64rem;font-weight:700;padding:1px 7px;}
+.sidebar-footer{padding:14px 22px;border-top:1.5px solid var(--border);font-size:0.7rem;color:var(--text2);}
+.main{margin-left:220px;padding:30px 34px;min-height:100vh;}
+.page{display:none;}.page.active{display:block;}
+
+/* ---------- Page header ---------- */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px;flex-wrap:wrap;gap:12px;}
+.page-title{font-family:var(--font-display);font-size:1.9rem;font-weight:400;color:var(--text);line-height:1.2;}
+.page-subtitle{font-size:0.83rem;color:var(--text2);margin-top:3px;}
+.back-btn{display:inline-flex;align-items:center;gap:8px;padding:7px 15px;border-radius:var(--radius-ctl);border:1.5px solid var(--border);background:var(--white);cursor:pointer;font-size:0.83rem;font-weight:500;color:var(--text2);margin-bottom:18px;transition:all 0.14s;}
+.back-btn:hover{background:var(--lav);color:var(--text);}
+
+/* ---------- Cards ---------- */
+.card{background:var(--white);border-radius:var(--radius2);padding:22px 26px;box-shadow:var(--shadow);border:1.5px solid var(--border);margin-bottom:20px;}
+.card-title{font-family:var(--font-display);font-size:1.05rem;font-weight:400;margin-bottom:3px;}
+.card-subtitle{font-size:0.76rem;color:var(--text2);margin-bottom:18px;}
+/* Small-caps section heading with a hairline running to the right */
+.section-title{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text2);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+/* Gradient hero banner */
+.hero{background:linear-gradient(135deg,var(--lav) 0%,var(--sky) 100%);border-radius:var(--radius2);padding:28px 32px;margin-bottom:20px;border:1.5px solid var(--border);}
+.hero h2{font-family:var(--font-display);font-size:1.5rem;font-weight:400;margin-bottom:6px;}
+.hero-stats{display:flex;gap:32px;margin-top:18px;flex-wrap:wrap;}
+
+/* ---------- Grids ---------- */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:20px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+.grid-2>.card,.grid-3>.card{margin-bottom:0;}
+
+/* ---------- KPI cards: coloured 4px top stripe ---------- */
+.kpi-card{background:var(--white);border-radius:var(--radius2);padding:20px 22px;box-shadow:var(--shadow);border:1.5px solid var(--border);position:relative;overflow:hidden;}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--kpi-accent,var(--lav2));}
+.grid-4>.kpi-card:nth-child(4n+1){--kpi-accent:var(--rose2);}
+.grid-4>.kpi-card:nth-child(4n+2){--kpi-accent:var(--sage2);}
+.grid-4>.kpi-card:nth-child(4n+3){--kpi-accent:var(--sky2);}
+.grid-4>.kpi-card:nth-child(4n+4){--kpi-accent:var(--peach2);}
+.kpi-card.accent-danger{--kpi-accent:var(--danger);}
+.kpi-card.accent-warning{--kpi-accent:var(--warning-strong);}
+.kpi-card.accent-success{--kpi-accent:var(--success);}
+.kpi-card.accent-brand{--kpi-accent:var(--brand-deep);}
+.kpi-label{font-size:0.73rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+.kpi-value{font-family:var(--font-display);font-size:1.7rem;color:var(--text);}
+.kpi-sub{font-size:0.75rem;color:var(--text2);margin-top:3px;}
+/* Compact stat tile (inside cards) */
+.stat-box{background:var(--cream);border-radius:12px;padding:12px 14px;border:1px solid var(--border);}
+.stat-box-label{font-size:0.66rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;}
+.stat-box-value{font-family:var(--font-display);font-size:1.2rem;color:var(--text);}
+
+/* ---------- Buttons ---------- */
+.btn-primary{padding:8px 18px;border-radius:var(--radius-ctl);border:none;background:var(--lav2);color:#fff;font-size:0.83rem;font-weight:600;cursor:pointer;transition:all 0.14s;}
+.btn-primary:hover{background:var(--primary-hover);}
+.btn-ghost{padding:8px 18px;border-radius:var(--radius-ctl);border:1.5px solid var(--border);background:var(--white);color:var(--text2);font-size:0.83rem;font-weight:500;cursor:pointer;transition:all 0.14s;}
+.btn-ghost:hover{background:var(--lav);color:var(--text);}
+.btn-danger{padding:8px 18px;border-radius:var(--radius-ctl);border:1.5px solid var(--danger-bg);background:var(--white);color:var(--danger);font-size:0.83rem;font-weight:600;cursor:pointer;transition:all 0.14s;}
+.btn-danger:hover{background:var(--danger-bg);}
+.btn-sm{font-size:0.72rem;padding:5px 11px;white-space:nowrap;}
+.btn-primary:disabled,.btn-ghost:disabled{opacity:0.45;cursor:default;}
+
+/* Segmented toggle (e.g. Monthly / Quarterly / Half-Yearly) */
+.segmented{display:inline-flex;gap:4px;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:4px;}
+.segmented button{padding:6px 14px;border-radius:8px;border:none;background:none;font-size:0.8rem;font-weight:500;color:var(--text2);cursor:pointer;transition:all 0.16s;}
+.segmented button.active{background:var(--lav2);color:#fff;font-weight:600;}
+.segmented button:hover:not(.active){background:var(--lav);color:var(--text);}
+
+/* Filter pills */
+.filter-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.pill{padding:6px 15px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-size:0.8rem;font-weight:500;color:var(--text2);cursor:pointer;transition:all 0.14s;}
+.pill:hover{border-color:var(--lav2);color:var(--text);}
+.pill.active{background:var(--lav2);color:#fff;border-color:var(--lav2);}
+.pill.pill-danger.active{background:var(--danger);border-color:var(--danger);}
+.pill.pill-success.active{background:var(--success);border-color:var(--success);}
+/* Checkbox pill ("CSQ only"-style toggle filter) */
+.check-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-size:0.8rem;font-weight:500;color:var(--text2);cursor:pointer;user-select:none;white-space:nowrap;transition:all 0.14s;}
+.check-pill:hover{border-color:var(--success-line);}
+.check-pill:has(input:checked){background:var(--success-bg);border-color:var(--success-line);color:var(--success);font-weight:600;}
+.check-pill input{accent-color:var(--success);margin:0;cursor:pointer;}
+
+/* Selectable chips (multi-select options in forms) */
+.chips{display:flex;flex-wrap:wrap;gap:7px;padding:4px 0;}
+.chip{padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--white);font-size:0.78rem;cursor:pointer;transition:all 0.13s;color:var(--text2);}
+.chip:hover{border-color:var(--lav2);}
+.chip.selected{background:var(--lav);border-color:var(--lav2);color:var(--text);font-weight:600;}
+/* Option tiles (pick one/many, e.g. team members) */
+.option-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.option-tile{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);cursor:pointer;background:var(--white);transition:all 0.15s;}
+.option-tile:hover{border-color:var(--lav2);background:var(--lav);}
+.option-tile.selected{border-color:var(--lav2);background:var(--lav);box-shadow:0 0 0 2px var(--lav2);}
+
+/* ---------- Badges & tags ---------- */
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:0.7rem;font-weight:600;white-space:nowrap;}
+.badge-success{background:var(--success-bg);color:var(--success);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.badge-warning{background:var(--warning-bg);color:var(--warning);}
+.badge-orange{background:var(--orange-bg);color:var(--orange);}
+.badge-info{background:var(--info-bg);color:var(--info);}
+.badge-purple{background:var(--purple-bg);color:var(--purple);}
+.badge-neutral{background:#ececf0;color:var(--text2);}
+.badge-rose{background:var(--rose);color:#b33050;}
+/* Square-ish tag (codes like QLD / NSW / VIC) */
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.68rem;font-weight:700;letter-spacing:0.02em;margin-right:4px;white-space:nowrap;}
+.tag-rose{background:#f6e0e6;color:#9c2a47;}
+.tag-blue{background:#e3f0fb;color:#1565a8;}
+.tag-violet{background:#e9e5f6;color:#4a3f8a;}
+.tag-green{background:var(--success-bg);color:var(--success);border:1px solid var(--success-line);padding:1px 5px;border-radius:4px;font-size:0.64rem;}
+
+/* ---------- Avatars ---------- */
+.avatar{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:0.78rem;color:#fff;flex-shrink:0;}
+.avatar.sm{width:22px;height:22px;font-size:0.6rem;}
+.avatar.lg{width:40px;height:40px;font-size:0.88rem;}
+.avatar-stack{display:inline-flex;}
+.avatar-stack .avatar{border:2px solid #fff;}
+.avatar-stack .avatar+.avatar{margin-left:-7px;}
+
+/* ---------- Tables ---------- */
+.table-wrap{background:var(--white);border-radius:var(--radius2);border:1.5px solid var(--border);box-shadow:var(--shadow);overflow:hidden;}
+.table-scroll{overflow-x:auto;}
+.table{width:100%;border-collapse:collapse;font-size:0.81rem;}
+.table th{background:var(--lav);padding:11px 14px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text);letter-spacing:0.04em;text-transform:uppercase;border-bottom:1.5px solid var(--border);white-space:nowrap;}
+.table th.sortable{cursor:pointer;user-select:none;}
+.table th.sortable:hover{background:var(--lav2);color:#fff;}
+.table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.table tr:last-child td{border-bottom:none;}
+.table tbody tr:hover td{background:var(--row-hover);}
+.table tbody tr.clickable{cursor:pointer;}
+.pagination{padding:10px 18px;border-top:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:0.76rem;color:var(--text2);}
+.pg-btns{display:flex;gap:4px;}
+.pg-btn{padding:4px 10px;border-radius:7px;border:1.5px solid var(--border);background:var(--white);font-size:0.76rem;cursor:pointer;color:var(--text2);transition:all 0.13s;}
+.pg-btn:hover{background:var(--lav);color:var(--text);border-color:var(--lav2);}
+.pg-btn.active{background:var(--lav2);color:#fff;border-color:var(--lav2);}
+.pg-btn:disabled{opacity:0.38;cursor:default;}
+
+/* ---------- Lists with mini bars ---------- */
+.list{background:var(--white);border-radius:var(--radius2);border:1.5px solid var(--border);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;}
+.list-header{padding:14px 18px;border-bottom:1.5px solid var(--border);background:var(--lav);display:flex;align-items:center;justify-content:space-between;font-size:0.72rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;}
+.list-item{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.13s;}
+.list-item:last-child{border-bottom:none;}
+.list-item:hover{background:#f6f3ff;}
+.list-item.selected{background:var(--lav);border-left:3px solid var(--lav2);}
+.item-info{flex:1;min-width:0;}
+.item-name{font-size:0.83rem;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.item-sub{font-size:0.7rem;color:var(--text2);margin-top:1px;}
+.item-val{font-size:0.83rem;font-weight:600;white-space:nowrap;}
+.bar-track{height:5px;border-radius:4px;background:var(--border);overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--lav2),var(--sky2));}
+
+/* ---------- Forms ---------- */
+.form-group{margin-bottom:14px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-row.three{grid-template-columns:1fr 1fr 1fr;}
+.form-label{font-size:0.73rem;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px;}
+.form-label .req{color:var(--danger);}
+.form-input,.form-select,.form-textarea{width:100%;padding:9px 13px;border:1.5px solid var(--border);border-radius:var(--radius-ctl);font-size:0.84rem;color:var(--text);background:var(--white);outline:none;transition:border-color 0.15s;}
+.form-input,.form-select{appearance:none;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--lav2);}
+.form-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b82' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;}
+.form-textarea{resize:vertical;min-height:80px;line-height:1.5;}
+.form-hint{font-size:0.7rem;color:var(--text2);margin-top:5px;}
+.search-input{flex:1;min-width:180px;padding:9px 15px;border:1.5px solid var(--border);border-radius:12px;font-size:0.86rem;background:var(--white);color:var(--text);outline:none;transition:border-color 0.16s;}
+.search-input:focus{border-color:var(--lav2);}
+.search-input::placeholder{color:var(--text2);}
+
+/* ---------- Feedback ---------- */
+.banner{border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;border:1.5px solid;}
+.banner-warning{background:#fff8e6;border-color:#f1d28a;}
+.banner-danger{background:#fdf0f0;border-color:#f0b4b4;}
+.banner-info{background:var(--info-bg);border-color:#b8d8f2;}
+.banner-title{font-weight:700;font-size:0.86rem;}
+.banner-warning .banner-title{color:#8a6100;}.banner-danger .banner-title{color:var(--danger);}.banner-info .banner-title{color:var(--info);}
+.banner-sub{font-size:0.74rem;color:var(--text2);margin-top:2px;}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:220px;color:var(--text2);font-size:0.86rem;text-align:center;}
+.empty-state .empty-icon{font-size:2rem;}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:10px 18px;border-radius:12px;font-size:0.82rem;font-weight:500;z-index:400;opacity:0;transform:translateY(8px);transition:all 0.22s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+/* ---------- Modal ---------- */
+.modal-backdrop{position:fixed;inset:0;background:rgba(45,45,58,0.38);display:none;align-items:flex-start;justify-content:center;z-index:300;padding:6vh 16px;overflow-y:auto;}
+.modal-backdrop.open{display:flex;}
+.modal{background:var(--white);border-radius:var(--radius2);box-shadow:var(--shadow2);border:1.5px solid var(--border);width:100%;max-width:640px;padding:24px 26px;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.modal-x{border:none;background:none;font-size:1rem;color:var(--text2);cursor:pointer;padding:4px 9px;border-radius:8px;}
+.modal-x:hover{background:var(--lav);color:var(--text);}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;}
+
+/* ---------- Timeline / log entries ---------- */
+.log-item{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:var(--cream);}
+.log-item:last-child{margin-bottom:0;}
+.log-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;flex-wrap:wrap;}
+.log-title{font-weight:700;font-size:0.82rem;}
+.log-date{font-size:0.72rem;color:var(--text2);}
+.log-notes{font-size:0.8rem;line-height:1.5;margin-bottom:6px;}
+
+/* ---------- Responsive ---------- */
+@media(max-width:1100px){.grid-3{grid-template-columns:1fr 1fr;}}
+@media(max-width:900px){
+  .grid-4{grid-template-columns:repeat(2,1fr);}
+  .grid-2,.grid-3,.form-row,.form-row.three{grid-template-columns:1fr;}
+  .main{padding:18px 14px;}
+}
+@media(max-width:600px){.sidebar{display:none;}.main{margin-left:0;}}
+
+/* ---------- Refresher Calls additions (tokens and patterns from the kit only) ---------- */
+.hidden{display:none !important;}
+.signin-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;}
+.signin-card{width:100%;max-width:420px;}
+.sidebar-footer .who{margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.link-btn{border:none;background:none;color:var(--info);cursor:pointer;font-size:0.72rem;padding:0;}
+.link-btn:hover{text-decoration:underline;}
+.cell-name{font-weight:600;}
+.cell-sub{font-size:0.72rem;color:var(--text2);margin-top:1px;}
+.actions{display:flex;gap:6px;justify-content:flex-end;}
+.loading{padding:40px;text-align:center;color:var(--text2);font-size:0.86rem;}
+</style>
+</head>
+<body>
+
+<!-- ============ SIGN-IN ============ -->
+<div id="signin" class="signin-wrap hidden">
+  <div class="card signin-card">
+    <div class="card-title" style="font-size:1.5rem">📞 Refresher Calls</div>
+    <div class="card-subtitle">Kallibr staff sign-in</div>
+    <form id="signin-form">
+      <div class="form-group">
+        <label class="form-label" for="signin-email">Work email</label>
+        <input class="form-input" id="signin-email" type="email" autocomplete="email" required placeholder="you@kallibr.com.au">
+      </div>
+      <button class="btn-primary" type="submit" id="signin-btn">Email me a sign-in link</button>
+    </form>
+    <div id="signin-msg" class="form-hint" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ============ SIGNED IN, NOT STAFF ============ -->
+<div id="notstaff" class="signin-wrap hidden">
+  <div class="card signin-card">
+    <div class="card-title">📞 Refresher Calls</div>
+    <div class="empty-state" style="min-height:140px">
+      <div class="empty-icon">🔒</div>
+      <div>Your account isn't set up for this tool yet. Ask your manager.</div>
+    </div>
+    <button class="btn-ghost" data-act="signout">Sign out</button>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+<nav class="sidebar">
+  <div class="sidebar-logo"><h1>Refresher Calls</h1><span>Call list · Kallibr</span></div>
+  <div class="sidebar-nav">
+    <div class="nav-label">Calling</div>
+    <button class="nav-item" data-nav="queue"><span class="icon">📞</span> Queue</button>
+    <button class="nav-item" data-nav="mine"><span class="icon">🗂️</span> My cards <span class="nav-count hidden" id="mine-count"></span></button>
+    <div class="nav-label" style="margin-top:10px">Progress</div>
+    <button class="nav-item" data-nav="dashboard"><span class="icon">📊</span> Dashboard</button>
+    <button class="nav-item hidden" data-nav="admin" id="nav-admin"><span class="icon">⚙️</span> Admin</button>
+  </div>
+  <div class="sidebar-footer">
+    <div id="list-updated">List updated …</div>
+    <div class="who"><span id="who-name"></span><button class="link-btn" data-act="signout">Sign out</button></div>
+  </div>
+</nav>
+
+<main class="main">
+  <div id="stale-banner" class="banner banner-warning hidden">
+    <div class="banner-title">⚠️ <span id="stale-text"></span></div>
+    <div class="banner-sub">The nightly update runs on the designated Kallibr PC. Calling and logging still work.</div>
+  </div>
+
+  <!-- QUEUE -->
+  <div id="page-queue" class="page">
+    <div class="page-header">
+      <div><div class="page-title">Queue</div><div class="page-subtitle">Bookers and students due a refresher that nobody has taken yet</div></div>
+    </div>
+    <div class="filter-row" id="queue-filters">
+      <button class="pill" data-filter="state" data-value="QLD">QLD</button>
+      <button class="pill" data-filter="state" data-value="NSW">NSW</button>
+      <button class="pill" data-filter="state" data-value="VIC">VIC</button>
+      <button class="pill" data-filter="state" data-value="G+L">G+L</button>
+      <span style="width:8px"></span>
+      <button class="pill" data-filter="type" data-value="Confined Space">Confined space</button>
+      <button class="pill" data-filter="type" data-value="Heights">Heights</button>
+      <button class="pill" data-filter="type" data-value="HSR">HSR</button>
+      <span style="width:8px"></span>
+      <button class="pill pill-danger" data-filter="due" data-value="overdue">🔴 Overdue</button>
+      <button class="pill" data-filter="due" data-value="upcoming">🟡 Due within 4 months</button>
+    </div>
+    <div class="filter-row">
+      <select class="form-select" id="f-kind" style="width:auto;min-width:170px" aria-label="Card type">
+        <option value="">All card types</option>
+        <option value="booker">Bookers</option>
+        <option value="organisation">Organisations</option>
+        <option value="individual">Individuals</option>
+      </select>
+      <input class="search-input" id="f-search" style="max-width:300px" placeholder="🔍  Search organisation or booker…" aria-label="Search organisation or booker">
+      <span class="muted" style="font-size:0.8rem" id="queue-count"></span>
+    </div>
+    <div id="queue-table"></div>
+  </div>
+
+  <!-- MY CARDS -->
+  <div id="page-mine" class="page">
+    <div class="page-header">
+      <div><div class="page-title">My cards</div><div class="page-subtitle">Cards you've taken, with call-backs due today at the top</div></div>
+    </div>
+    <div id="mine-table"></div>
+  </div>
+
+  <!-- CARD VIEW -->
+  <div id="page-card" class="page">
+    <button class="back-btn" data-act="back">← Back</button>
+    <div id="card-body"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="page-dashboard" class="page">
+    <div class="page-header">
+      <div><div class="page-title">Dashboard</div><div class="page-subtitle">How the team is going and how much of each month's past students have been won back</div></div>
+    </div>
+    <div id="dashboard-body"></div>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="page-admin" class="page">
+    <div class="page-header">
+      <div><div class="page-title">Admin</div><div class="page-subtitle">Team members and nightly updates</div></div>
+    </div>
+    <div id="admin-body"></div>
+  </div>
+</main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script id="rc-logic">
+// Pure functions only: no DOM, no network. Tested by tests/site/logic.test.mjs.
+const RC = (() => {
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const PROFILE_URL = 'https://kallibr.app.axcelerate.com/management/management2/contact_view.cfm?contactID=';
+  const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+  const esc = (v) => (v === null || v === undefined ? '' : String(v).replace(/[&<>"']/g, (ch) => ESC[ch]));
+  const profileUrl = (contactId) => PROFILE_URL + encodeURIComponent(String(contactId));
+
+  function sydneyParts(d) {
+    const parts = new Intl.DateTimeFormat('en-AU', {
+      timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(d);
+    const get = (t) => parts.find((p) => p.type === t).value;
+    return { y: get('year'), m: get('month'), d: get('day'), h: +get('hour'), min: get('minute') };
+  }
+  function sydneyToday(now = new Date()) {
+    const p = sydneyParts(now);
+    return `${p.y}-${p.m}-${p.d}`;
+  }
+  const fmtMonth = (iso) => (iso ? `${MONTHS[+String(iso).slice(5, 7) - 1]} ${String(iso).slice(0, 4)}` : '');
+  const fmtDate = (iso) => (iso ? `${+String(iso).slice(8, 10)} ${fmtMonth(iso)}` : '');
+
+  function dueLabel(dueIso, todayIso) {
+    const overdue = dueIso < todayIso;
+    return { text: (overdue ? 'Overdue since ' : 'Due ') + fmtMonth(dueIso), overdue };
+  }
+
+  function byQueueOrder(a, b) {
+    if (b.open_lines !== a.open_lines) return b.open_lines - a.open_lines;
+    const ad = a.earliest_due || '9999-12-31', bd = b.earliest_due || '9999-12-31';
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    return String(a.target_name || '').localeCompare(String(b.target_name || ''));
+  }
+  const sortQueue = (cards) => [...cards].sort(byQueueOrder);
+
+  function filterCards(cards, f = {}) {
+    const q = String(f.search || '').trim().toLowerCase();
+    return cards.filter((c) =>
+      (!f.state || (c.locations || []).includes(f.state)) &&
+      (!f.type || (c.types || []).includes(f.type)) &&
+      (!f.due || (f.due === 'overdue' ? c.overdue_lines > 0 : c.open_lines > c.overdue_lines)) &&
+      (!f.kind || c.kind === f.kind) &&
+      (!q || String(c.target_name || '').toLowerCase().includes(q) || String(c.org_name || '').toLowerCase().includes(q)));
+  }
+
+  const queueCards = (cards) => cards.filter((c) => !c.claimed_by && !c.do_not_call && c.open_lines > 0);
+
+  function myCards(cards, staffId, todayIso) {
+    const mine = cards.filter((c) => c.claimed_by === staffId && c.open_lines > 0);
+    const due = mine.filter((c) => c.callback_on && c.callback_on <= todayIso)
+      .sort((a, b) => (a.callback_on < b.callback_on ? -1 : a.callback_on > b.callback_on ? 1 : byQueueOrder(a, b)));
+    const rest = sortQueue(mine.filter((c) => !(c.callback_on && c.callback_on <= todayIso)));
+    return [...due, ...rest];
+  }
+
+  function staleBanner(lastOkFinishedAtIso, nowMs) {
+    if (!lastOkFinishedAtIso) return 'The list has not been updated yet. It may be out of date.';
+    const at = Date.parse(lastOkFinishedAtIso);
+    if (nowMs - at <= 36 * 3600 * 1000) return null;
+    return `The list was last updated ${fmtDate(sydneyToday(new Date(at)))}. It may be out of date.`;
+  }
+
+  return { PROFILE_URL, profileUrl, esc, sydneyToday, fmtMonth, fmtDate, dueLabel, sortQueue, filterCards,
+           queueCards, myCards, staleBanner, _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
+})();
+if (typeof module !== 'undefined') module.exports = RC;
+</script>
+
+<script id="rc-app">
+// ---- Configuration: the project URL and its PUBLISHABLE key only (never the secret key). ----
+const SUPABASE_URL = 'https://pjxceqwzxruuunbhgbfo.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_pXDGhkI3cD0x7aOn1VxYMg_NY2qBmiP';
+
+const PAGE_SIZE = 25;
+const STATE_TAG = { QLD: 'tag-rose', NSW: 'tag-blue', VIC: 'tag-violet', 'G+L': 'tag-green' };
+const KIND_LABEL = { booker: '📋 Booker', organisation: '🏢 Organisation', individual: '👤 Individual' };
+const $ = (id) => document.getElementById(id);
+const esc = RC.esc;
+
+const S = {
+  sb: null, me: null, cards: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
+  filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, entering: false,
+};
+const today = () => RC.sydneyToday(new Date());
+
+// ---------- small UI helpers ----------
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function showOnly(id) {
+  for (const x of ['signin', 'notstaff', 'app']) $(x).classList.toggle('hidden', x !== id);
+}
+function showPage(id) {
+  if (id !== 'card') S.prevPage = id;
+  S.page = id;
+  document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-' + id));
+  document.querySelectorAll('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.nav === id));
+  if (id === 'queue') renderQueue();
+  if (id === 'mine') renderMine();
+  if (id === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+  if (id === 'admin' && typeof renderAdmin === 'function') renderAdmin();
+  window.scrollTo(0, 0);
+}
+function stateTags(locations) {
+  return (locations || []).map((l) => `<span class="tag ${STATE_TAG[l] || 'tag-violet'}">${esc(l)}</span>`).join('') || '<span class="muted">—</span>';
+}
+function emptyState(icon, text) {
+  return `<div class="card"><div class="empty-state"><div class="empty-icon">${icon}</div><div>${esc(text)}</div></div></div>`;
+}
+function errorBanner(err) {
+  return `<div class="banner banner-danger"><div class="banner-title">Something went wrong</div><div class="banner-sub">${esc(err && err.message ? err.message : err)}</div></div>`;
+}
+function friendlyError(error) {
+  const m = String((error && error.message) || error || '');
+  if (/not staff/i.test(m)) return 'Your account is no longer active for this tool.';
+  if (/Failed to fetch|NetworkError|network/i.test(m)) return "Couldn't reach the server. Check your connection and try again.";
+  return m || 'Unknown error';
+}
+
+// ---------- data ----------
+async function fetchAll(table, columns, build = (q) => q) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build(S.sb.from(table).select(columns)).range(from, from + 999);
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < 1000) return out;
+  }
+}
+async function loadCards() {
+  S.cards = await fetchAll('v_cards', '*', (q) => q.order('card_key'));
+  updateMineCount();
+}
+async function loadLastSync() {
+  const { data, error } = await S.sb.from('sync_runs').select('finished_at').eq('result', 'ok')
+    .order('id', { ascending: false }).limit(1);
+  if (error) throw error;
+  S.lastOk = data.length ? data[0].finished_at : null;
+  $('list-updated').textContent = S.lastOk ? `List updated ${RC.fmtDate(RC.sydneyToday(new Date(S.lastOk)))}` : 'List not updated yet';
+  const msg = RC.staleBanner(S.lastOk, Date.now());
+  $('stale-text').textContent = msg || '';
+  $('stale-banner').classList.toggle('hidden', !msg);
+}
+async function refresh() {
+  try {
+    await Promise.all([loadCards(), loadLastSync()]);
+  } catch (e) {
+    toast(friendlyError(e));
+  }
+  if (S.page === 'queue') renderQueue();
+  if (S.page === 'mine') renderMine();
+}
+function updateMineCount() {
+  if (!S.me) return;
+  const n = RC.myCards(S.cards, S.me.id, today()).filter((c) => c.callback_on && c.callback_on <= today()).length;
+  $('mine-count').textContent = n;
+  $('mine-count').classList.toggle('hidden', n === 0);
+}
+
+// ---------- queue ----------
+function cardRow(c, actions) {
+  const due = c.earliest_due ? RC.dueLabel(c.earliest_due, today()) : null;
+  const callBack = c.callback_on && c.callback_on <= today()
+    ? ' <span class="badge badge-warning">🟡 Call back today</span>' : '';
+  return `<tr>
+    <td><div class="cell-name">${esc(c.target_name)}${callBack}</div><div class="cell-sub">${esc(KIND_LABEL[c.kind] || '')}</div></td>
+    <td>${c.org_name ? esc(c.org_name) : '<span class="muted">—</span>'}</td>
+    <td>${stateTags(c.locations)}</td>
+    <td class="num">${esc(c.open_lines)}</td>
+    <td class="num">${c.overdue_lines ? `<span class="badge badge-danger">${esc(c.overdue_lines)}</span>` : '0'}</td>
+    <td>${due ? `<span class="${due.overdue ? 'badge badge-danger' : 'badge badge-neutral'}">${esc(due.text)}</span>` : ''}</td>
+    <td><div class="actions">${actions}</div></td>
+  </tr>`;
+}
+function cardTable(rows, pager) {
+  return `<div class="table-wrap"><div class="table-scroll"><table class="table">
+    <thead><tr><th>Booker or student</th><th>Organisation</th><th>State</th><th class="num">Refreshers</th>
+      <th class="num">Overdue</th><th>Earliest due</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>${pager || ''}</div>`;
+}
+function pager(total, page) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = total ? page * PAGE_SIZE + 1 : 0, to = Math.min(total, (page + 1) * PAGE_SIZE);
+  return `<div class="pagination"><span>${from}–${to} of ${total}</span><div class="pg-btns">
+    <button class="pg-btn" data-act="page" data-page="${page - 1}" ${page <= 0 ? 'disabled' : ''} aria-label="Previous page">‹</button>
+    <button class="pg-btn active" disabled>${page + 1} / ${pages}</button>
+    <button class="pg-btn" data-act="page" data-page="${page + 1}" ${page >= pages - 1 ? 'disabled' : ''} aria-label="Next page">›</button>
+  </div></div>`;
+}
+function renderQueue() {
+  if (!S.me) return;
+  const all = RC.queueCards(S.cards);
+  const list = RC.sortQueue(RC.filterCards(all, S.filters));
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  S.queuePage = Math.min(S.queuePage, pages - 1);
+  $('queue-count').textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
+  document.querySelectorAll('#queue-filters .pill').forEach((p) =>
+    p.classList.toggle('active', S.filters[p.dataset.filter] === p.dataset.value));
+  if (!all.length) {
+    $('queue-table').innerHTML = emptyState('🎉', 'Nothing in the queue: every card has been taken or finished.');
+    return;
+  }
+  if (!list.length) {
+    $('queue-table').innerHTML = emptyState('🔍', 'No cards match these filters. Clear a filter to see more.');
+    return;
+  }
+  const rows = list.slice(S.queuePage * PAGE_SIZE, (S.queuePage + 1) * PAGE_SIZE).map((c) => cardRow(c,
+    `<button class="btn-primary btn-sm" data-act="take" data-key="${esc(c.card_key)}">Take</button>`)).join('');
+  $('queue-table').innerHTML = cardTable(rows, pager(list.length, S.queuePage));
+}
+
+// ---------- my cards ----------
+function renderMine() {
+  if (!S.me) return;
+  const list = RC.myCards(S.cards, S.me.id, today());
+  if (!list.length) {
+    $('mine-table').innerHTML = emptyState('🗂️', "You haven't taken any cards yet. Pick one from the Queue.");
+    return;
+  }
+  $('mine-table').innerHTML = cardTable(list.map((c) => cardRow(c,
+    `<button class="btn-primary btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button>
+     <button class="btn-ghost btn-sm" data-act="release" data-key="${esc(c.card_key)}">Release</button>`)).join(''));
+}
+
+// ---------- actions ----------
+async function takeCard(key) {
+  const { data, error } = await S.sb.rpc('claim_card', { p_card_key: key });
+  if (error) { toast(friendlyError(error)); return; }
+  if (data === true) {
+    toast('Card taken ✓');
+    await refresh();
+    openCard(key);
+  } else {
+    toast('Someone else just took that card');
+    await refresh();
+  }
+}
+async function releaseCard(key) {
+  const { error } = await S.sb.rpc('release_card', { p_card_key: key });
+  if (error) { toast(friendlyError(error)); return; }
+  toast('Card released ✓');
+  await refresh();
+  if (S.page === 'card') showPage(S.prevPage);
+}
+function openCard(key) {
+  S.cardKey = key;
+  showPage('card');
+  if (typeof renderCard === 'function') renderCard(key);
+  else $('card-body').innerHTML = '<div class="loading">Loading…</div>';
+}
+
+// ---------- sign-in ----------
+async function sendLink(ev) {
+  ev.preventDefault();
+  const email = $('signin-email').value.trim().toLowerCase();
+  const msg = $('signin-msg');
+  if (!email) return;
+  $('signin-btn').disabled = true;
+  msg.textContent = 'Sending…';
+  const { error } = await S.sb.auth.signInWithOtp({
+    email, options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname },
+  });
+  $('signin-btn').disabled = false;
+  if (error) {
+    msg.textContent = /signup|not allowed|not found/i.test(error.message)
+      ? "That email isn't set up for this tool. Ask your manager."
+      : `Couldn't send the link: ${error.message}`;
+    return;
+  }
+  msg.textContent = `Check your email: we've sent a sign-in link to ${email}.`;
+}
+async function enter(session) {
+  if (S.entering || (S.me && session)) return;
+  S.entering = true;
+  try {
+    const email = String(session.user.email || '').toLowerCase();
+    const { data, error } = await S.sb.from('staff').select('id, email, full_name, role, active').eq('email', email).maybeSingle();
+    if (error || !data || !data.active) { S.me = null; showOnly('notstaff'); return; }
+    S.me = data;
+    $('who-name').textContent = data.full_name;
+    $('nav-admin').classList.toggle('hidden', data.role !== 'manager');
+    showOnly('app');
+    $('queue-table').innerHTML = '<div class="loading">Loading the list…</div>';
+    showPage('queue');
+    await refresh();
+  } finally {
+    S.entering = false;
+  }
+}
+async function signOut() {
+  await S.sb.auth.signOut();
+  S.me = null; S.cards = [];
+  showOnly('signin');
+}
+
+// ---------- wiring ----------
+document.addEventListener('click', (e) => {
+  const nav = e.target.closest('[data-nav]');
+  if (nav) { showPage(nav.dataset.nav); return; }
+  const pill = e.target.closest('#queue-filters .pill');
+  if (pill) {
+    const f = pill.dataset.filter;
+    S.filters[f] = S.filters[f] === pill.dataset.value ? '' : pill.dataset.value;
+    S.queuePage = 0;
+    renderQueue();
+    return;
+  }
+  const btn = e.target.closest('[data-act]');
+  if (!btn || btn.disabled) return;
+  const key = btn.dataset.key;
+  switch (btn.dataset.act) {
+    case 'take': takeCard(key); break;
+    case 'release': releaseCard(key); break;
+    case 'open': openCard(key); break;
+    case 'back': showPage(S.prevPage); refresh(); break;
+    case 'page': S.queuePage = Math.max(0, +btn.dataset.page); renderQueue(); break;
+    case 'signout': signOut(); break;
+    default: if (typeof onAction === 'function') onAction(btn.dataset.act, btn, e);
+  }
+});
+$('f-kind').addEventListener('change', (e) => { S.filters.kind = e.target.value; S.queuePage = 0; renderQueue(); });
+$('f-search').addEventListener('input', (e) => { S.filters.search = e.target.value; S.queuePage = 0; renderQueue(); });
+$('signin-form').addEventListener('submit', sendLink);
+
+(async function init() {
+  if (!SUPABASE_KEY || !window.supabase) {
+    showOnly('signin');
+    $('signin-msg').textContent = 'This page is not configured yet (missing project key).';
+    $('signin-btn').disabled = true;
+    return;
+  }
+  S.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  S.sb.auth.onAuthStateChange((event, session) => {
+    if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) setTimeout(() => enter(session), 0);
+    if (event === 'SIGNED_OUT') { S.me = null; showOnly('signin'); }
+  });
+  const { data } = await S.sb.auth.getSession();
+  if (!data.session) showOnly('signin');
+})();
+</script>
+</body>
+</html>
