@@ -712,9 +712,9 @@ const RC = (() => {
   }
 
   // ---- dashboard ----
+  // A refresher booked without a call is simply Won on the chart (the owner's call, 18 Nov 2026).
   const SEGMENTS = [
     { key: 'won', label: 'Won', color: '#9ecf9e' },
-    { key: 'booked_without_call', label: 'Booked without a call', color: '#c8e6c8' },
     { key: 'lost', label: 'Lost', color: '#f2a0b0' },
     { key: 'pending', label: 'Pending', color: '#f9be7c' },
     { key: 'not_called', label: 'Not called', color: '#ddd4f0' },
@@ -737,7 +737,8 @@ const RC = (() => {
     const at = new Map(all.map((m, i) => [m, i]));
     const datasets = SEGMENTS.map((s) => ({ label: s.label, data: all.map(() => 0), backgroundColor: s.color }));
     for (const r of rows) {
-      const si = SEGMENTS.findIndex((s) => s.key === r.segment);
+      const segment = r.segment === 'booked_without_call' ? 'won' : r.segment;
+      const si = SEGMENTS.findIndex((s) => s.key === segment);
       if (si >= 0) datasets[si].data[at.get(monthKey(r.month))] += Number(r.n);
     }
     return { labels: all.map(fmtMonth), datasets };

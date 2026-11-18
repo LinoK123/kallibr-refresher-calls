@@ -168,14 +168,19 @@ test('cohortChart fills gaps and keeps segment order', () => {
   const rows = [{ month: '2025-01-01', segment: 'won', n: 2 }, { month: '2025-03-01', segment: 'not_called', n: 5 }];
   const c = plain(RC.cohortChart(rows));
   assert.deepEqual(c.labels, ['Jan 2025', 'Feb 2025', 'Mar 2025']);
-  assert.deepEqual(c.datasets.map((d) => d.label), ['Won', 'Booked without a call', 'Lost', 'Pending', 'Not called']);
-  assert.deepEqual(c.datasets[0].data, [2, 0, 0]); assert.deepEqual(c.datasets[4].data, [0, 0, 5]);
-  assert.equal(c.datasets[2].backgroundColor, '#f2a0b0');
+  assert.deepEqual(c.datasets.map((d) => d.label), ['Won', 'Lost', 'Pending', 'Not called']);
+  assert.deepEqual(c.datasets[0].data, [2, 0, 0]); assert.deepEqual(c.datasets[3].data, [0, 0, 5]);
+  assert.equal(c.datasets[1].backgroundColor, '#f2a0b0');
+});
+test('cohortChart counts booked-without-a-call as Won', () => {
+  const c = plain(RC.cohortChart([{ month: '2025-01-01', segment: 'won', n: 2 }, { month: '2025-01-01', segment: 'booked_without_call', n: 1 }]));
+  assert.deepEqual(c.datasets[0].data, [3]);
+  assert.equal(c.datasets.length, 4);
 });
 test('cohortChart spans a year boundary', () => {
   const c = plain(RC.cohortChart([{ month: '2024-11-01', segment: 'lost', n: 1 }, { month: '2025-02-01', segment: 'lost', n: 3 }]));
   assert.deepEqual(c.labels, ['Nov 2024', 'Dec 2024', 'Jan 2025', 'Feb 2025']);
-  assert.deepEqual(c.datasets[2].data, [1, 0, 0, 3]);
+  assert.deepEqual(c.datasets[1].data, [1, 0, 0, 3]);
 });
 test('cohortChart with no rows', () => assert.deepEqual(plain(RC.cohortChart([])),
   { labels: [], datasets: plain(RC.SEGMENTS).map((s) => ({ label: s.label, data: [], backgroundColor: s.color })) }));
