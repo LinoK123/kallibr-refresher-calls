@@ -416,9 +416,11 @@ a:hover{text-decoration:underline;}
   <!-- MY CARDS -->
   <div id="page-mine" class="page">
     <div class="page-header">
-      <div><div class="page-title">My cards</div><div class="page-subtitle">Cards you've taken, with call-backs due today at the top</div></div>
+      <div><div class="page-title" id="mine-title">My cards</div><div class="page-subtitle" id="mine-subtitle">Cards you've taken, with call-backs due today at the top</div></div>
+      <div class="tools-row"><label class="form-label" for="mine-who" style="margin:0">Assigned to</label>
+        <select class="form-select" id="mine-who" style="width:auto;min-width:200px"></select></div>
     </div>
-    <div class="card"><div class="section-title">📅 Your call-backs</div><div id="mine-callbacks"></div></div>
+    <div class="card"><div class="section-title" id="mine-callbacks-title">📅 Your call-backs</div><div id="mine-callbacks"></div></div>
     <div class="filter-row" id="mine-filters">
       <button class="pill" data-filter="state" data-value="QLD">QLD</button>
       <button class="pill" data-filter="state" data-value="NSW">NSW</button>
@@ -614,6 +616,16 @@ const RC = (() => {
       .sort((a, b) => (a.callback_on < b.callback_on ? -1 : a.callback_on > b.callback_on ? 1 : byQueueOrder(a, b)));
     const rest = sortQueue(mine.filter((c) => !callbackDue(c, staffId, todayIso)));
     return [...due, ...rest];
+  }
+
+  // Cards held by one team member (as myCards) or by everyone ('all'); call-backs due come first.
+  function heldCards(cards, who, todayIso) {
+    if (who !== 'all') return myCards(cards, who, todayIso);
+    const held = cards.filter((c) => c.claimed_by && c.open_lines > 0);
+    const isDue = (c) => callbackDue(c, c.claimed_by, todayIso);
+    const due = held.filter(isDue)
+      .sort((a, b) => (a.callback_on < b.callback_on ? -1 : a.callback_on > b.callback_on ? 1 : byQueueOrder(a, b)));
+    return [...due, ...sortQueue(held.filter((c) => !isDue(c)))];
   }
 
   function skippedNotice(ids, lines, students) {
@@ -898,7 +910,7 @@ const RC = (() => {
   }
 
   return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, signInError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
-           queueCards, myCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
+           queueCards, myCards, heldCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
            weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort, callbackList, fmtWeekday,
@@ -1013,12 +1025,14 @@ function updateMineCount() {
 }
 
 // ---------- queue ----------
-function cardRow(c, actions) {
+// showHolder: add "held by <name>" under the card type (for cards that aren't the viewer's)
+function cardRow(c, actions, showHolder = false) {
   const due = c.earliest_due ? RC.dueLabel(c.earliest_due, today()) : null;
-  const callBack = RC.callbackDue(c, S.me && S.me.id, today())
+  const callBack = RC.callbackDue(c, c.claimed_by, today())
     ? ' <span class="badge badge-warning">🟡 Call back today</span>' : '';
+  const holder = showHolder && c.claimed_by ? ` · held by ${esc(staffName(c.claimed_by))}` : '';
   return `<tr class="clickable" data-open-key="${esc(c.card_key)}" title="Open this card">
-    <td><div class="cell-name">${esc(c.target_name)}${callBack}</div><div class="cell-sub">${esc(KIND_LABEL[c.kind] || '')}</div></td>
+    <td><div class="cell-name">${esc(c.target_name)}${callBack}</div><div class="cell-sub">${esc(KIND_LABEL[c.kind] || '')}${holder}</div></td>
     <td>${c.org_name ? esc(c.org_name) : '<span class="muted">—</span>'}</td>
     <td>${stateTags(c.locations)}</td>
     <td class="num">${esc(c.open_lines)}</td>
@@ -1097,13 +1111,23 @@ function callbackRows(items, showHolder, emptyText) {
   }).join('');
 }
 
-// ---------- my cards ----------
+// ---------- my cards (or anyone's: "Assigned to") ----------
 function renderMine() {
   if (!S.me) return;
-  $('mine-callbacks').innerHTML = callbackRows(RC.callbackList(S.cards, S.me.id, today()), false,
-    'No call-backs set. When you save a call with a call-back date, it shows here.');
+  const active = S.staff.filter((s) => s.active);
+  if (!S.mineWho || (S.mineWho !== 'all' && !active.some((s) => s.id === S.mineWho))) S.mineWho = S.me.id;
+  const who = S.mineWho, mine = who === S.me.id, everyone = who === 'all';
+  $('mine-who').innerHTML = `<option value="all" ${everyone ? 'selected' : ''}>All team members</option>`
+    + active.map((s) => `<option value="${esc(s.id)}" ${s.id === who ? 'selected' : ''}>${esc(s.full_name)}${s.id === S.me.id ? ' (you)' : ''}</option>`).join('');
+  $('mine-title').textContent = mine ? 'My cards' : everyone ? "Everyone's cards" : `${staffName(who)}'s cards`;
+  $('mine-subtitle').textContent = mine ? "Cards you've taken, with call-backs due today at the top"
+    : everyone ? 'Every card a team member holds, with call-backs due today at the top'
+      : `Cards ${staffName(who)} holds, with call-backs due today at the top`;
+  $('mine-callbacks-title').textContent = mine ? '📅 Your call-backs' : '📅 Call-backs';
+  $('mine-callbacks').innerHTML = callbackRows(RC.callbackList(S.cards, who, today()), !mine,
+    mine ? 'No call-backs set. When you save a call with a call-back date, it shows here.' : 'No call-backs set.');
   // usual order: call-backs due first, then biggest; a clicked column overrides it until its third click
-  const usual = RC.myCards(S.cards, S.me.id, today());
+  const usual = RC.heldCards(S.cards, who, today());
   const filtered = RC.filterCards(usual, S.mineFilters);
   const list = S.mineSort.key ? RC.sortCards(filtered, S.mineSort.key, S.mineSort.dir) : filtered;
   $('mine-count').textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
@@ -1111,17 +1135,19 @@ function renderMine() {
   document.querySelectorAll('#mine-filters .pill').forEach((p) =>
     p.classList.toggle('active', S.mineFilters[p.dataset.filter] === p.dataset.value));
   if (!usual.length) {
-    $('mine-table').innerHTML = emptyState('🗂️', "You haven't taken any cards yet. Pick one from the Queue.");
+    $('mine-table').innerHTML = emptyState('🗂️', mine ? "You haven't taken any cards yet. Pick one from the Queue."
+      : everyone ? 'Nobody holds any cards right now.' : `${staffName(who)} doesn't hold any cards right now.`);
     return;
   }
   if (!list.length) {
-    $('mine-table').innerHTML = emptyState('🔍', 'None of your cards match these filters. Clear a filter to see more.');
+    $('mine-table').innerHTML = emptyState('🔍', 'No cards match these filters. Clear a filter to see more.');
     return;
   }
+  const canRelease = (c) => c.claimed_by === S.me.id || S.me.role === 'manager';
   $('mine-table').innerHTML = cardTable(list.map((c) => cardRow(c,
     `<button class="btn-primary btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button>
-     <button class="btn-ghost btn-sm" data-act="release" data-key="${esc(c.card_key)}">Release</button>`)).join(''),
-    null, S.mineSort, 'mine-sort');
+     ${canRelease(c) ? `<button class="btn-ghost btn-sm" data-act="release" data-key="${esc(c.card_key)}">Release</button>` : ''}`,
+    !mine)).join(''), null, S.mineSort, 'mine-sort');
 }
 
 // ---------- actions ----------
@@ -1874,6 +1900,7 @@ document.addEventListener('click', (e) => {
 $('f-kind').addEventListener('change', (e) => { S.filters.kind = e.target.value; S.queuePage = 0; renderQueue(); });
 $('f-search').addEventListener('input', (e) => { S.filters.search = e.target.value; S.queuePage = 0; renderQueue(); });
 $('m-kind').addEventListener('change', (e) => { S.mineFilters.kind = e.target.value; renderMine(); });
+$('mine-who').addEventListener('change', (e) => { S.mineWho = e.target.value; renderMine(); });
 $('m-search').addEventListener('input', (e) => { S.mineFilters.search = e.target.value; renderMine(); });
 $('signin-form').addEventListener('submit', sendCode);
 $('code-form').addEventListener('submit', verifyCode);

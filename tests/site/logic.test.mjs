@@ -380,3 +380,13 @@ test('fmtWeekday', () => {
   assert.equal(RC.fmtWeekday('2026-11-20'), 'Fri 20 Nov');
   assert.equal(RC.fmtWeekday('2026-11-16'), 'Mon 16 Nov');
 });
+
+// ---------- Cards held, by anyone ----------
+test('heldCards: one person (same as myCards) or everyone, call-backs due first', () => {
+  const c = (key, holder, o = {}) => card({ card_key: key, target_name: key, claimed_by: holder, claimed_at: '2026-11-10T00:00:00Z', ...o });
+  const cards = [c('small', 'u1', { open_lines: 1 }), c('big', 'u2', { open_lines: 9 }), c('due', 'u2', { callback_on: '2026-11-17', open_lines: 2 }),
+                 c('queue', null), c('finished', 'u1', { open_lines: 0 }), c('mine', 'me', { open_lines: 4 })];
+  assert.deepEqual(plain(RC.heldCards(cards, 'all', T).map((x) => x.card_key)), ['due', 'big', 'mine', 'small']);
+  assert.deepEqual(plain(RC.heldCards(cards, 'u2', T).map((x) => x.card_key)), ['due', 'big']);
+  assert.deepEqual(plain(RC.heldCards(cards, 'me', T).map((x) => x.card_key)), plain(RC.myCards(cards, 'me', T).map((x) => x.card_key)));
+});
