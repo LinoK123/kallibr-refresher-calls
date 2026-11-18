@@ -120,3 +120,103 @@ def build_lines(con: sqlite3.Connection, today: date) -> list[Line]:
         lines.append(Line(cid, t, last, due, ev[2], ev[3], ev[4], ev[1], ev[5], ev[6]))
     lines.sort(key=lambda l: (l.contact_id, l.refresher_type))
     return lines
+
+
+@dataclass(frozen=True)
+class Placement:
+    contact_id: int
+    card_key: str
+    kind: str                       # booker | organisation | individual
+    target_contact_id: int | None
+    target_name: str
+    org_name: str | None            # the card's organisation (same for every student on the card)
+    org_key: str | None
+
+
+def _org(org_name):
+    """(display name, key) for a real organisation, or (None, None) for blank / cash individuals."""
+    name = (org_name or "").strip()
+    if not name or name.lower().startswith(config.INDIVIDUAL_ORG_PREFIX.lower()):
+        return None, None
+    return name, name.lower()
+
+
+def _norm(name):
+    return " ".join((name or "").split()).lower()
+
+
+def _staff_names(con) -> set[str]:
+    rows = con.execute("select bookedstatusenteredbyfullname, count(*) from bookings "
+                       "where bookedstatusenteredbyfullname is not null group by 1")
+    return {_norm(n) for n, k in rows if k >= config.STAFF_ENTERED_MIN and _norm(n)}
+
+
+def _requesters(con) -> dict[int, tuple[int, str]]:
+    """booking ID -> (requester contact ID, requester name), where a requester is recorded."""
+    out = {}
+    for sid, who, name in con.execute("select statusid, whobyid, workshopbookingrequestedbyfullname from bookings"):
+        if sid is not None and who is not None and sid not in out:
+            out[sid] = (int(who), (name or "").strip())
+    return out
+
+
+def place_students(con: sqlite3.Connection, lines: list[Line],
+                   ignore_ids: tuple[int, ...] = ()) -> dict[int, Placement]:
+    """Choose one card per student (spec 5.3). Keyed by student contact ID."""
+    latest: dict[int, Line] = {}
+    for l in lines:
+        cur = latest.get(l.contact_id)
+        if cur is None or (l.last_done, l.refresher_type) > (cur.last_done, cur.refresher_type):
+            latest[l.contact_id] = l
+
+    types = type_map(con)
+    real = defaultdict(list)          # (contact, course_type_id, start_date) -> booking IDs
+    for b in _bookings(con, types):
+        if b.counted:
+            real[(b.contact_id, b.course_type_id, b.start_date)].append(b.booking_id)
+    requesters = _requesters(con)
+    staff = _staff_names(con)
+    ignore = set(ignore_ids)
+
+    def booker_for(l: Line):
+        for bid in sorted(real.get((l.contact_id, l.course_type_id, l.last_done), []), reverse=True):
+            req = requesters.get(bid)
+            if req is None:
+                continue
+            who, name = req
+            if who in ignore or (_norm(name) and _norm(name) in staff):
+                continue
+            return who, name
+        return None
+
+    placed: dict[int, Placement] = {}
+    for cid, l in latest.items():
+        org_name, org_key = _org(l.org_name)
+        req = booker_for(l)
+        if req and req[0] != cid:
+            who, name = req
+            placed[cid] = Placement(cid, f"B:{who}", "booker", who, name, org_name, org_key)
+        elif req is None and org_key:
+            placed[cid] = Placement(cid, f"O:{org_key}", "organisation", None, org_name, org_name, org_key)
+        else:
+            placed[cid] = Placement(cid, f"S:{cid}", "individual", cid, l.student_name, org_name, org_key)
+
+    # One person, one card: a student who also books for others goes on their own booker card.
+    bookers = {p.target_contact_id for p in placed.values() if p.kind == "booker"}
+    for cid in bookers & placed.keys():
+        p = placed[cid]
+        if p.card_key != f"B:{cid}":
+            placed[cid] = Placement(cid, f"B:{cid}", "booker", cid, p.target_name, p.org_name, p.org_key)
+
+    # Card-level fields must agree for every student on a card: take them from the student
+    # with the most recent course (then lowest contact ID), using the booker's own name where known.
+    by_card = defaultdict(list)
+    for p in placed.values():
+        by_card[p.card_key].append(p)
+    for key, ps in by_card.items():
+        ps.sort(key=lambda p: (-latest[p.contact_id].last_done.toordinal(), p.contact_id))
+        lead = next((p for p in ps if p.kind == "booker" and p.contact_id != p.target_contact_id), ps[0])
+        for p in ps:
+            placed[p.contact_id] = Placement(p.contact_id, key, lead.kind, lead.target_contact_id,
+                                             lead.target_name, lead.org_name, lead.org_key)
+    return placed
