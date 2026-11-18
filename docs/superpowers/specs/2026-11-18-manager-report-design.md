@@ -27,7 +27,7 @@ Every Monday at 9 am, every active manager gets one email showing the previous w
 - refreshers newly added last week (`first_listed_on` in the week);
 - call-backs overdue, per person and in total, using the same "set while held" rule as the call-backs list.
 
-**People listed:** every active team member, including managers and anyone with no activity, sorted by name.
+**People listed:** every active team member, including managers and anyone with no activity, sorted by name. The exception is anyone whose email is in `KallibrAgent\refresher_report_leave_out.txt`: the owner asked for managers who don't call to be kept off the table. That file stays on the PC because the repository is public. Their activity still counts in the team totals.
 
 **Recipients:** every active manager.
 

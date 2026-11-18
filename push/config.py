@@ -25,6 +25,7 @@ SMTP_PORT = 587
 EMAIL_FROM_NAME = "Kallibr Refresher Calls"
 DIGEST_MARKER = "refresher_digest_week.txt"     # in the KallibrAgent folder: the Monday of the week last sent
 REPORT_MARKER = "refresher_report_week.txt"     # in the KallibrAgent folder: the Monday of the week last reported
+REPORT_LEAVE_OUT = "refresher_report_leave_out.txt"   # in the KallibrAgent folder: emails left off the report's per-person table
 
 MAX_SOURCE_AGE_HOURS = 36
 MAX_LINE_DROP = 0.20

@@ -124,6 +124,7 @@ py push/refresher_push.py --manager-report --force --to you@kallibr.com.au   # s
   - **Outputs:** refreshers won (credited to staff, or booked without a call), lost, and the win rate.
   - **The list now:** refreshers still open, cards in the Queue and held, new refreshers added last week, and call-backs overdue.
   - **One row per active team member:** people with no activity are still listed. "–" means no wins or losses yet.
+- **Leaving someone off the table:** list their email, one per line, in `KallibrAgent\refresher_report_leave_out.txt`. A `#` starts a note. Use this for managers who don't make calls. They still get the email if they're managers, and their activity still counts in the team totals. Changes apply from the next send. `--dry-run` shows the result.
 - **When:** the scheduled task **Kallibr refresher manager report** runs every Monday at 9:00 am and wakes a sleeping PC. If the PC is off, it runs at the next sign-in. A run later in the week still reports the previous week, so a missed Monday sends on Tuesday.
 - **The task's action:** `pyw.exe -3 "<repository>\push\refresher_push.py" --manager-report --log "%USERPROFILE%\KallibrAgent\sync.log"`. Its working folder is `<repository>\push`. It needs no push and no sync.
 - **Never twice a week:** `KallibrAgent\refresher_report_week.txt` holds the Monday of the week last reported. Delete it to let this week send again, or use `--force`. If every send fails, the file isn't written, so the next run tries again.
@@ -133,7 +134,7 @@ py push/refresher_push.py --manager-report --force --to you@kallibr.com.au   # s
   - `--to` sends to one address only and doesn't count as this week's send.
   - `--force` sends even if this week's has gone.
   - `--log PATH` appends everything to a file and prints nothing.
-- **Moving PCs:** export the task, or re-create it with the action above. Then delete it on the old PC.
+- **Moving PCs:** export the task, or re-create it with the action above. Then delete it on the old PC. Copy `refresher_report_leave_out.txt` across too.
 
 How it is wired on the designated PC:
 

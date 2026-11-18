@@ -46,7 +46,8 @@ class Report:
     people: list
 
 
-def collect(client, today: date) -> Report:
+def collect(client, today: date, leave_out=frozenset()) -> Report:
+    """`leave_out`: lower-case emails left off the per-person table. Their activity still counts in the team totals."""
     monday, sunday = prior_week(today)
     in_week = lambda d: d is not None and monday <= d <= sunday
     since = (datetime.combine(monday, datetime.min.time()) - timedelta(days=1)).isoformat()   # a day early, trimmed below
@@ -122,7 +123,7 @@ def collect(client, today: date) -> Report:
     people = sorted((dict(name=s["full_name"], cards_taken=len(taken_by[s["id"]]), calls=calls_by[s["id"]],
                           worked=worked_by[s["id"]], won=won_by[s["id"]], lost=lost_by[s["id"]],
                           win_rate=_rate(won_by[s["id"]], lost_by[s["id"]]), callbacks_overdue=overdue_by[s["id"]])
-                     for s in staff), key=lambda p: p["name"].lower())
+                     for s in staff if (s.get("email") or "").lower() not in leave_out), key=lambda p: p["name"].lower())
     return Report(monday, sunday, team, people)
 
 
@@ -169,23 +170,37 @@ def managers(client) -> list[str]:
                   if s.get("active") and s.get("role") == "manager")
 
 
-def run_report(client, today: date, marker_path, sender, force: bool = False, only: str | None = None) -> str:
+def read_addresses(path) -> set[str]:
+    """Email addresses listed in a text file, one per line ('#' starts a note), lower-cased. No file: none.
+    Used for the leave-out list, which lives on the designated PC, not in this (public) repository."""
+    found = set()
+    if path and Path(path).exists():
+        for raw in Path(path).read_text(encoding="utf-8-sig").splitlines():
+            address = raw.split("#", 1)[0].strip().lower()
+            if address:
+                found.add(address)
+    return found
+
+
+def run_report(client, today: date, marker_path, sender, force: bool = False, only: str | None = None,
+               leave_out_path=None) -> str:
     """Send last week's report to every active manager, once per week. Returns a one-line summary.
-    `force` ignores the marker; `only` sends to that one address and leaves the marker alone (for testing)."""
+    `force` ignores the marker; `only` sends to that one address and leaves the marker alone (for testing).
+    People listed in `leave_out_path` are left off the per-person table (the team totals still count them)."""
     monday = prior_week(today)[0].isoformat()
     marker = Path(marker_path)
     if not force and not only and marker.exists() and marker.read_text(encoding="utf-8").strip() == monday:
         return "Manager report: already sent this week"
-    subject, text, html = render(collect(client, today))
-    recipients = [only.strip()] if only else managers(client)
+    subject, text, html = render(collect(client, today, read_addresses(leave_out_path)))
+    to_list = [only.strip()] if only else managers(client)
     sent, errors = 0, []
-    for to in recipients:
+    for to in to_list:
         try:
             sender(to, subject, text, html)
             sent += 1
         except Exception as e:                       # one bad address must not stop the others
             errors.append(f"{to}: {type(e).__name__}")
-    if not only and (sent or not recipients):
+    if not only and (sent or not to_list):
         marker.write_text(monday + "\n", encoding="utf-8")
     summary = f"Manager report: {sent} sent, {len(errors)} failed"
     if errors:

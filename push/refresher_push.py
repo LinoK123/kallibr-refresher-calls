@@ -244,10 +244,13 @@ def send_call_back_emails(client, today: date, marker_path: Path, force: bool = 
         return f"Call-back emails failed: {type(e).__name__}: {str(e)[:200]}"
 
 
-def manager_report_cli(a, client, today: date, marker: Path) -> int:
-    """--manager-report: last week's team report to every active manager (or a preview with --dry-run)."""
+def manager_report_cli(a, client, today: date, folder: Path) -> int:
+    """--manager-report: last week's team report to every active manager (or a preview with --dry-run).
+    The marker and the leave-out list live in `folder` (the KallibrAgent folder)."""
+    leave_out = folder / config.REPORT_LEAVE_OUT
     if a.dry_run:
-        subject, text, _ = manager_report.render(manager_report.collect(client, today))
+        report = manager_report.collect(client, today, manager_report.read_addresses(leave_out))
+        subject, text, _ = manager_report.render(report)
         print(f"Manager report preview (nothing sent). To: {', '.join(manager_report.managers(client)) or '(no active managers)'}")
         print(f"Subject: {subject}\n\n{text}")
         return 0
@@ -256,8 +259,8 @@ def manager_report_cli(a, client, today: date, marker: Path) -> int:
         print("Manager report not set up (run: py refresher_push.py --set-email)")
         return 1
     try:
-        print(manager_report.run_report(client, today, marker, callback_digest.smtp_sender(*creds),
-                                        force=a.force, only=a.to))
+        print(manager_report.run_report(client, today, folder / config.REPORT_MARKER, callback_digest.smtp_sender(*creds),
+                                        force=a.force, only=a.to, leave_out_path=leave_out))
     except Exception as e:
         print(f"Manager report failed: {type(e).__name__}: {str(e)[:200]}")
         return 1
@@ -306,7 +309,7 @@ def _main(a) -> int:
         print(send_call_back_emails(Client(url, key), _now().date(), marker, force=True, only=a.to))
         return 0
     if a.manager_report:
-        return manager_report_cli(a, Client(url, key), _now().date(), db.parent / config.REPORT_MARKER)
+        return manager_report_cli(a, Client(url, key), _now().date(), db.parent)
     if not db.exists():
         print(f"Refresher push failed: no database at {db}")
         return 1

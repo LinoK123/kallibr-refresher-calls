@@ -341,8 +341,8 @@ def report_cli(tmp_path, monkeypatch):
     monkeypatch.setattr(refresher_push, "_now", lambda: NOW)
     monkeypatch.setattr(refresher_push, "email_credentials", lambda: ("sender@gmail.com", "app-pw"))
 
-    def fake_run_report(client, today, marker_path, sender, force=False, only=None):
-        calls.append(dict(today=today, marker=marker_path, force=force, only=only))
+    def fake_run_report(client, today, marker_path, sender, force=False, only=None, leave_out_path=None):
+        calls.append(dict(today=today, marker=marker_path, force=force, only=only, leave_out=leave_out_path))
         return "Manager report: 3 sent, 0 failed"
     monkeypatch.setattr(refresher_push.manager_report, "run_report", fake_run_report)
     return calls, tmp_path
@@ -351,7 +351,8 @@ def report_cli(tmp_path, monkeypatch):
 def test_manager_report_flag_sends_and_skips_the_push(report_cli, capsys):
     calls, tmp = report_cli
     assert refresher_push.main(["--db", str(tmp / "axc_agent.db"), "--manager-report"]) == 0
-    assert calls == [dict(today=TODAY, marker=tmp / config.REPORT_MARKER, force=False, only=None)]
+    assert calls == [dict(today=TODAY, marker=tmp / config.REPORT_MARKER, force=False, only=None,
+                          leave_out=tmp / config.REPORT_LEAVE_OUT)]
     assert "Manager report: 3 sent" in capsys.readouterr().out
 
 
@@ -363,12 +364,16 @@ def test_manager_report_force_and_to(report_cli):
 
 def test_manager_report_dry_run_prints_without_sending(report_cli, monkeypatch, capsys):
     calls, tmp = report_cli
-    monkeypatch.setattr(refresher_push.manager_report, "collect", lambda client, today: "REPORT")
+    (tmp / config.REPORT_LEAVE_OUT).write_text("boss@kallibr.com.au\n", encoding="utf-8")
+    seen = []
+    monkeypatch.setattr(refresher_push.manager_report, "collect",
+                        lambda client, today, leave_out=frozenset(): seen.append(leave_out) or "REPORT")
     monkeypatch.setattr(refresher_push.manager_report, "render", lambda r: ("Subject line", "Body text\n", "<p>html</p>"))
     monkeypatch.setattr(refresher_push.manager_report, "managers", lambda client: ["a@kallibr.com.au", "b@kallibr.com.au"])
     assert refresher_push.main(["--db", str(tmp / "axc_agent.db"), "--manager-report", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert calls == [] and "Subject line" in out and "Body text" in out and "a@kallibr.com.au, b@kallibr.com.au" in out
+    assert seen == [{"boss@kallibr.com.au"}]
 
 
 def test_log_appends_the_output_to_a_file(report_cli, capsys):

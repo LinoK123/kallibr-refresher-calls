@@ -138,3 +138,25 @@ def test_a_failed_recipient_is_reported(tmp_path):
     summary = mr.run_report(FakeClient(), MON, tmp_path / "report.txt", Sender(fail_for={"mel@kallibr.com.au"}))
     assert "0 sent" in summary and "1 failed" in summary
     assert not (tmp_path / "report.txt").exists()          # nothing went out: try again on the next run
+
+
+def test_read_addresses_ignores_notes_blanks_and_case(tmp_path):
+    f = tmp_path / "leave_out.txt"
+    f.write_text("﻿# not on the stats table\nJO@kallibr.com.au   # manager, doesn't call\n\n al@kallibr.com.au \n",
+                 encoding="utf-8")
+    assert mr.read_addresses(f) == {"jo@kallibr.com.au", "al@kallibr.com.au"}
+    assert mr.read_addresses(tmp_path / "missing.txt") == set() and mr.read_addresses(None) == set()
+
+
+def test_listed_people_are_left_out_of_the_table_but_not_the_totals():
+    r = mr.collect(FakeClient(), MON, leave_out={"jo@kallibr.com.au"})
+    assert [p["name"] for p in r.people] == ["Al <Brown> & Co", "Mel Manager", "Quiet Person"]
+    assert (r.team["calls"], r.team["won_credited"]) == (3, 1)                  # Jo's calls and win still count
+
+
+def test_run_report_uses_the_leave_out_list_and_still_sends_to_every_manager(tmp_path):
+    f, sender = tmp_path / "leave_out.txt", Sender()
+    f.write_text("mel@kallibr.com.au\n", encoding="utf-8")
+    mr.run_report(FakeClient(), MON, tmp_path / "report.txt", sender, leave_out_path=f)
+    assert [s[0] for s in sender.sent] == ["mel@kallibr.com.au"]                 # off the table, still emailed
+    assert "Mel Manager" not in sender.sent[0][2] and "Mel Manager" not in sender.sent[0][3]
