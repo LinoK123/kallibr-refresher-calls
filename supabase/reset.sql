@@ -6,6 +6,7 @@ drop table if exists
   sync_runs, card_events, line_outcomes, call_logs, course_history, lines, students, cards, staff
   cascade;
 
+drop function if exists apply_push(bigint) cascade;
 drop function if exists claim_card(text) cascade;
 drop function if exists release_card(text) cascade;
 drop function if exists assign_card(text, uuid) cascade;

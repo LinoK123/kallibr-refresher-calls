@@ -214,3 +214,77 @@ def run_concurrently(db_url, calls, card_key="B:901"):
         setup.execute("delete from cards where card_key = %s", (card_key,))
         setup.execute("delete from staff where email = any(%s)", (emails,))
         setup.close()
+
+
+# ---------- nightly merge helpers (Task 6) ----------
+
+def st(contact_id, card_key="B:900", name=None, org="Acme Pty Ltd", target_name="Pat Booker"):
+    """A staged student row with its card's fields."""
+    kind = KIND[card_key[0]]
+    target = int(card_key[2:]) if kind != "organisation" else None
+    return dict(contact_id=contact_id, full_name=name or f"Student {contact_id}", org_name=org, card_key=card_key,
+                card_kind=kind, target_contact_id=target, target_name=target_name, card_org_name=org,
+                card_org_key=org.strip().lower() if org else None)
+
+
+def ln(contact_id, rtype="Heights", last_done="2024-06-10", course_name="Course", location="QLD", confirmed=True):
+    """A staged line; due date = last done + the type's interval."""
+    from datetime import date
+    d = date.fromisoformat(last_done)
+    months = d.year * 12 + d.month - 1 + INTERVAL[rtype]
+    y, m = divmod(months, 12)
+    import calendar
+    due = date(y, m + 1, min(d.day, calendar.monthrange(y, m + 1)[1]))
+    return dict(contact_id=contact_id, refresher_type=rtype, last_done=last_done, due_date=due.isoformat(),
+                course_name=course_name, location=location, attendance_confirmed=confirmed)
+
+
+def ck(contact_id, rtype="Heights", last_done="2024-06-10", won=False, booked_on=None, class_date=None,
+       course_name=None, in_window=True, tentative=False):
+    return dict(contact_id=contact_id, refresher_type=rtype, last_done=last_done, in_window=in_window, won=won,
+                booked_on=booked_on, class_date=class_date, course_name=course_name, tentative=tentative)
+
+
+def hi(contact_id, course_name, completed_on):
+    return dict(contact_id=contact_id, course_name=course_name, completed_on=completed_on)
+
+
+def stage(cur, students=(), lines=(), checks=(), history=()):
+    """Insert a running sync_runs row with the expected counts, plus its staging rows. Returns run_id."""
+    with as_owner(cur):
+        cur.execute("insert into sync_runs (result, students_pushed, lines_pushed, checks_pushed, history_pushed) "
+                    "values ('running', %s, %s, %s, %s) returning id",
+                    (len(students), len(lines), len(checks), len(history)))
+        run = cur.fetchone()[0]
+        for table, rows in (("stage_students", students), ("stage_lines", lines),
+                            ("stage_checks", checks), ("stage_history", history)):
+            for r in rows:
+                cols = ["run_id", *r.keys()]
+                cur.execute(f"insert into {table} ({', '.join(cols)}) values ({', '.join(['%s'] * len(cols))})",
+                            (run, *r.values()))
+    return run
+
+
+def apply(cur, run):
+    cur.execute("select apply_push(%s)", (run,))
+    return cur.fetchone()[0]
+
+
+def line_id(cur, contact_id, rtype="Heights"):
+    with as_owner(cur):
+        cur.execute("select id from lines where contact_id = %s and refresher_type = %s order by last_done desc",
+                    (contact_id, rtype))
+        return cur.fetchone()[0]
+
+
+def won(cur, lid):
+    with as_owner(cur):
+        cur.execute("select status, won_by, won_without_call, won_booked_on from lines where id = %s", (lid,))
+        s, by, wo, bo = cur.fetchone()
+    return dict(status=s, won_by=by, won_without_call=wo, won_booked_on=bo)
+
+
+def count(cur, sql, params=()):
+    with as_owner(cur):
+        cur.execute(sql, params)
+        return cur.fetchone()[0]
