@@ -135,5 +135,7 @@ def test_smtp_sender_builds_a_two_part_message():
     send("jo@kallibr.com.au", "Subject", "plain", "<p>html</p>")
     msg = sent["msg"]
     assert sent["server"] == (config.SMTP_HOST, config.SMTP_PORT) and sent["tls"] and sent["login"] == "sender@gmail.com"
-    assert msg["To"] == "jo@kallibr.com.au" and "Kallibr Refresher Calls" in msg["From"] and "sender@gmail.com" in msg["From"]
+    assert msg["To"] == "jo@kallibr.com.au" and "sender@gmail.com" in msg["From"]
+    # a Gmail sender shown with the company's name looks like impersonation to Microsoft 365, so it never uses it
+    assert msg["From"].startswith("Refresher call list <") and "kallibr" not in msg["From"].split("<")[0].lower()
     assert [p.get_content_type() for p in msg.iter_parts()] == ["text/plain", "text/html"]

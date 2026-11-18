@@ -52,7 +52,7 @@ To set up or replace the Gmail sender:
 2. Create an app password named "Supabase" (Google Account → Security → 2-Step Verification → App passwords).
 3. In Supabase → Authentication → Emails → SMTP Settings, enable custom SMTP:
    - sender email and username: the Gmail address
-   - sender name: `Kallibr Refresher Calls`
+   - sender name: `Refresher call list`. Never use "Kallibr" or a colleague's name here: a Gmail address shown with the company's name or a staff member's name is exactly what Microsoft 365's impersonation checks flag as phishing. The push's Monday emails use the same name (`EMAIL_FROM_NAME` in `push/config.py`).
    - host: `smtp.gmail.com`, port: `587`
    - password: the app password
 
@@ -69,22 +69,32 @@ If the sender address changes, the allow entry must change too.
 
 The emails must carry a **code** (`{{ .Token }}`), never `{{ .ConfirmationURL }}`. A scanner that opens a link would use up the code too, because it is the same one-time token.
 
-- **Magic Link** and **Confirm signup**, both with the subject `Your Refresher Calls sign-in code` and this body:
+- **Magic Link** and **Confirm signup**, both with the subject `Your code for the refresher call list` and this body:
 
   ```html
-  <h2>Refresher Calls</h2>
-  <p>Your sign-in code is:</p>
-  <p style="font-size:26px;font-weight:bold;letter-spacing:4px">{{ .Token }}</p>
-  <p>Type it on the sign-in page. It works once, for one hour. If you didn't ask for it, you can ignore this email.</p>
+  <p>Hi,</p>
+  <p>Here's the code you asked for on Kallibr's refresher call list:</p>
+  <p style="font-size:22px"><b>{{ .Token }}</b></p>
+  <p>Type it into the page where you asked for it. It works once, within the next hour.</p>
+  <p>If you didn't ask for a code, you can delete this email.</p>
+  <p>Refresher call list</p>
   ```
 
-- **Invite user** (only used if someone is invited rather than created; see above), with the subject `You've been added to Kallibr Refresher Calls` and this body:
+- **Invite user** (only used if someone is invited rather than created; see above), with the subject `You've been added to the refresher call list` and this body:
 
   ```html
-  <h2>Refresher Calls</h2>
+  <p>Hi,</p>
   <p>You've been added to Kallibr's refresher call list.</p>
-  <p>To sign in, go to <a href="{{ .SiteURL }}">{{ .SiteURL }}</a>, enter this email address and click <b>Email me a sign-in code</b>.</p>
+  <p>Open the call list page your manager gave you, enter this email address and ask for a code.</p>
+  <p>Refresher call list</p>
   ```
+
+Keep these emails free of anything that looks like credential phishing:
+- **No links or buttons.** A login email linking to a site outside kallibr.com.au is the classic phishing pattern, and staff already have the page open when they ask for a code.
+- **No "sign in", "verify", "account" or "security"** in the subject.
+- **No images or heavy styling,** and a few lines of ordinary text around the code.
+
+If Microsoft 365 still flags them, open the message in Defender → Email & collaboration → **Explorer** (or Quarantine → the message → details). **Detection technologies** names the reason, for example impersonation, URL reputation or the general filter, and that says what to change next.
 
 ## Supabase settings that must stay as they are
 
