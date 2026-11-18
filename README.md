@@ -76,7 +76,8 @@ py push/refresher_push.py --allow-reversals  # only after checking an "aborted: 
 
 How it is wired on the designated PC:
 
-- `KallibrAgent\axc_nightly.pyw` (the scheduled job) runs `axc_sync.py`. If the sync succeeds, it calls `axc_refresher_hook.run_if_enabled(HERE)` (a copy of `push/kallibragent/axc_refresher_hook.py`).
+- The Windows scheduled task **Kallibr aXcelerate sync** runs daily at 5:30 am. It wakes a sleeping PC, and if the PC was off it runs as soon as you next sign in to Windows. It must run `pyw.exe -3 "%USERPROFILE%\KallibrAgent\axc_nightly.pyw"`. Older installs run `py axc_sync.py` directly, which syncs but never pushes. Double-click `KallibrAgent\Hide-SyncWindow.cmd` to switch the task over; it keeps the task's time and settings. To check, run `(Get-ScheduledTask 'Kallibr aXcelerate sync').Actions | Format-List Execute, Arguments` in PowerShell.
+- `KallibrAgent\axc_nightly.pyw` runs `axc_sync.py`. If the sync succeeds, it calls `axc_refresher_hook.run_if_enabled(HERE)` (a copy of `push/kallibragent/axc_refresher_hook.py`).
 - The hook does nothing unless `KallibrAgent\refresher_push.json` exists. That file holds `{"repo": "<path to this repository>"}` and is what makes a PC the designated one. **Never put `refresher_push.json` in a KallibrAgent setup package.** The hook file and the edited `axc_nightly.pyw` are harmless on other PCs without it.
 - The push's one-line summary is appended to `KallibrAgent\sync.log`, after the sync's own output.
 
@@ -101,7 +102,8 @@ The site shows a warning banner when the last successful update is more than 36 
    4. Copy `push/kallibragent/axc_refresher_hook.py` into `KallibrAgent`.
    5. Add the refresher block to the end of `axc_nightly.pyw`, as on the current PC.
    6. Create `refresher_push.json` with the new repository path.
-   7. Run `py push/refresher_push.py --dry-run` to check.
+   7. Make sure the scheduled task runs `axc_nightly.pyw` (double-click `Hide-SyncWindow.cmd`).
+   8. Run `py push/refresher_push.py --dry-run` to check.
 
 The secret key lives only in Windows Credential Manager (service `kallibr-refresher`). **Never copy it out of there:** not into a file, an email, a chat or this repository. The site carries only the publishable key.
 
