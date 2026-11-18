@@ -303,8 +303,15 @@ a:hover{text-decoration:underline;}
 .kpi-card.accent-neutral{--kpi-accent:var(--lav2);}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
 .card-head .card-subtitle{margin-bottom:0;}
+.kpi-7{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:24px;}
+.kpi-7 .kpi-card{padding:16px 16px;}
+.kpi-7 .kpi-value{font-size:1.45rem;}
+.people-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.people-row:last-child{border-bottom:none;}
+.people-row .item-info{flex:1;min-width:0;}
+@media(max-width:1300px){.kpi-7{grid-template-columns:repeat(4,1fr);}}
 @media(max-width:1100px){.kpi-5{grid-template-columns:repeat(3,1fr);}}
-@media(max-width:900px){.kpi-5{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:900px){.kpi-5,.kpi-7{grid-template-columns:repeat(2,1fr);}}
 </style>
 </head>
 <body>
@@ -357,6 +364,7 @@ a:hover{text-decoration:underline;}
     <button class="nav-item" data-nav="mine"><span class="icon">🗂️</span> My cards <span class="nav-count hidden" id="mine-count"></span></button>
     <div class="nav-label" style="margin-top:10px">Progress</div>
     <button class="nav-item" data-nav="dashboard"><span class="icon">📊</span> Dashboard</button>
+    <button class="nav-item" data-nav="people"><span class="icon">👥</span> People</button>
     <button class="nav-item hidden" data-nav="admin" id="nav-admin"><span class="icon">⚙️</span> Admin</button>
   </div>
   <div class="sidebar-footer">
@@ -422,6 +430,27 @@ a:hover{text-decoration:underline;}
       <div><div class="page-title">Dashboard</div><div class="page-subtitle">How the team is going and how much of each month's past students have been won back</div></div>
     </div>
     <div id="dashboard-body"></div>
+  </div>
+
+  <!-- PEOPLE -->
+  <div id="page-people" class="page">
+    <div class="page-header">
+      <div><div class="page-title">People</div><div class="page-subtitle">How each team member is going: calls, wins and the cards they hold</div></div>
+      <div class="tools-row" id="people-controls"></div>
+    </div>
+    <div class="kpi-7" id="people-tiles"><div class="loading">Loading…</div></div>
+    <div class="card">
+      <div class="card-title">Calls and wins per week</div><div class="card-subtitle">Last 12 weeks, Monday to Sunday</div>
+      <div style="position:relative;height:260px"><canvas id="people-weekly" role="img" aria-label="Calls and wins per week for the chosen team member"></canvas></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><div class="section-title">🗂️ Their cards</div><div id="people-cards"></div></div>
+      <div class="card"><div class="section-title">🟢 Recent wins</div><div id="people-wins"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Team comparison</div><div class="card-subtitle" id="people-compare-sub">Calls logged and refreshers won per person</div>
+      <div style="position:relative" id="people-compare-box"><canvas id="people-compare" role="img" aria-label="Calls and wins per team member"></canvas></div>
+    </div>
   </div>
 
   <!-- ADMIN -->
@@ -705,6 +734,46 @@ const RC = (() => {
   }
   const fmtRate = (x) => (x === null || x === undefined || x === '' ? '–' : `${Math.round(Number(x) * 100)}%`);
 
+  // ---- People page ----
+  const dayNo = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86400000;
+  const isoOfDay = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+  function weekStarts(todayIso, n = 12) {
+    const monday = dayNo(periodStart('week', todayIso));
+    return Array.from({ length: n }, (_, i) => isoOfDay(monday - 7 * (n - 1 - i)));
+  }
+  function weeklySeries(callDates, winDates, todayIso, n = 12) {
+    const starts = weekStarts(todayIso, n);
+    const first = dayNo(starts[0]);
+    const count = (dates) => {
+      const out = starts.map(() => 0);
+      for (const d of dates) {
+        const i = Math.floor((dayNo(d) - first) / 7);
+        if (i >= 0 && i < n) out[i] += 1;
+      }
+      return out;
+    };
+    return { labels: starts.map((s) => `${+s.slice(8, 10)} ${MONTHS[+s.slice(5, 7) - 1]}`),
+             calls: count(callDates), wins: count(winDates) };
+  }
+  function personTiles(row, cards, staffId, todayIso) {
+    const held = cards.filter((c) => c.claimed_by === staffId && c.open_lines > 0);
+    return {
+      held: held.length,
+      callbacks: held.filter((c) => callbackDue(c, staffId, todayIso)).length,
+      calls: row ? Number(row.calls_logged) : 0,
+      won: row ? Number(row.won) : 0,
+      pending: row ? Number(row.pending) : 0,
+      lost: row ? Number(row.lost) : 0,
+      rate: row && row.win_rate !== undefined ? row.win_rate : null,
+    };
+  }
+  function teamComparison(rows) {
+    const sorted = [...rows].sort((a, b) => (b.calls_logged - a.calls_logged) || (b.won - a.won)
+      || String(a.full_name).localeCompare(String(b.full_name), 'en-AU'));
+    return { labels: sorted.map((r) => r.full_name), calls: sorted.map((r) => Number(r.calls_logged)),
+             wins: sorted.map((r) => Number(r.won)) };
+  }
+
   // ---- sign-in ----
   // A sign-in code typed by the person (email scanners open links, which uses one-time links up).
   const cleanCode = (value) => {
@@ -746,6 +815,7 @@ const RC = (() => {
            queueCards, myCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
+           weekStarts, weeklySeries, personTiles, teamComparison,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
 if (typeof module !== 'undefined') module.exports = RC;
@@ -789,6 +859,7 @@ function showPage(id) {
   if (id === 'queue') renderQueue();
   if (id === 'mine') renderMine();
   if (id === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+  if (id === 'people' && typeof renderPeople === 'function') renderPeople();
   if (id === 'admin' && typeof renderAdmin === 'function') renderAdmin();
   window.scrollTo(0, 0);
 }
@@ -1335,6 +1406,103 @@ async function drawTeam() {
   </table></div></div>`;
 }
 
+// ---------- people ----------
+const PEOPLE = { person: null, period: 'month', weekly: null, compare: null, ticket: 0 };
+const PERIOD_LABEL = { week: 'This week', month: 'This month', all: 'All time' };
+const CALLS_COLOUR = '#b8a9de', WINS_COLOUR = '#9ecf9e';
+const chartAxes = { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#6b6b82' } },
+                    y: { grid: { color: 'rgba(0,0,0,0.04)' }, border: { display: false }, beginAtZero: true,
+                         ticks: { font: { size: 10 }, color: '#6b6b82', precision: 0 } } };
+const chartLegend = { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 11, color: '#6b6b82' } };
+
+async function renderPeople() {
+  const active = S.staff.filter((s) => s.active);
+  if (!PEOPLE.person || !active.some((s) => s.id === PEOPLE.person)) PEOPLE.person = S.me.id;
+  $('people-controls').innerHTML = `
+    <select class="form-select" id="people-person" style="width:auto;min-width:200px" aria-label="Team member">
+      ${active.map((s) => `<option value="${esc(s.id)}" ${s.id === PEOPLE.person ? 'selected' : ''}>${esc(s.full_name)}${s.id === S.me.id ? ' (you)' : ''}</option>`).join('')}
+    </select>
+    ${segButtons('people-period', [['week', 'This week'], ['month', 'This month'], ['all', 'All time']], PEOPLE.period)}`;
+  const ticket = ++PEOPLE.ticket;
+  const person = PEOPLE.person, t = today();
+  const weeks = RC.weekStarts(t, 12);
+  const since = new Date(Date.parse(`${weeks[0]}T00:00:00Z`) - 86400000).toISOString();   // a day early; trimmed below
+  let stats, calls, wins, recent;
+  try {
+    [stats, calls, wins, recent] = await Promise.all([
+      S.sb.rpc('team_stats', { p_from: RC.periodStart(PEOPLE.period, t) }),
+      fetchAll('call_logs', 'id, called_at', (q) => q.eq('staff_id', person).gte('called_at', since).order('id')),
+      fetchAll('lines', 'id, won_at', (q) => q.eq('won_by', person).eq('status', 'won').gte('won_at', weeks[0]).order('id')),
+      S.sb.from('lines').select('id, refresher_type, contact_id, won_at, won_booked_on, won_class_date, students(full_name)')
+        .eq('won_by', person).eq('status', 'won').order('won_at', { ascending: false }).order('id', { ascending: false }).limit(10),
+      loadCards(),
+    ]);
+  } catch (e) {
+    if (ticket === PEOPLE.ticket) $('people-tiles').innerHTML = errorBanner(friendlyError(e));
+    return;
+  }
+  if (ticket !== PEOPLE.ticket) return;                        // a newer choice has taken over
+  if (stats.error || recent.error) { $('people-tiles').innerHTML = errorBanner(friendlyError(stats.error || recent.error)); return; }
+
+  // tiles
+  const k = RC.personTiles(stats.data.find((r) => r.staff_id === person), S.cards, person, t);
+  const period = PERIOD_LABEL[PEOPLE.period];
+  const tile = (accent, label, value, sub) => `<div class="kpi-card ${accent}"><div class="kpi-label">${label}</div>
+    <div class="kpi-value">${esc(value)}</div><div class="kpi-sub">${esc(sub)}</div></div>`;
+  $('people-tiles').innerHTML =
+    tile('accent-brand', 'Cards held', k.held, 'Right now') +
+    tile('accent-warning', 'Call-backs due', k.callbacks, 'Today or earlier') +
+    tile('accent-neutral', 'Calls logged', k.calls, period) +
+    tile('accent-success', '🟢 Won', k.won, period) +
+    tile('accent-warning', '🟡 Pending', k.pending, period) +
+    tile('accent-danger', '🔴 Lost', k.lost, period) +
+    tile('accent-success', 'Win rate', RC.fmtRate(k.rate), 'Won ÷ (won + lost)');
+
+  // weekly chart
+  const series = RC.weeklySeries(calls.map((c) => RC.sydneyToday(new Date(c.called_at))), wins.map((w) => w.won_at), t, 12);
+  if (PEOPLE.weekly) PEOPLE.weekly.destroy();
+  PEOPLE.weekly = new Chart($('people-weekly'), {
+    data: { labels: series.labels, datasets: [
+      { type: 'line', label: 'Refreshers won', data: series.wins, borderColor: WINS_COLOUR, backgroundColor: WINS_COLOUR,
+        borderWidth: 2.5, tension: 0.4, pointRadius: 3, order: 1 },
+      { type: 'bar', label: 'Calls logged', data: series.calls, backgroundColor: 'rgba(184,169,222,0.7)', borderColor: CALLS_COLOUR,
+        borderWidth: 1.5, borderRadius: 6, order: 2 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: chartLegend }, scales: chartAxes },
+  });
+
+  // their cards
+  const held = RC.myCards(S.cards, person, t);
+  $('people-cards').innerHTML = held.length ? held.map((c) => `<div class="people-row">
+      <div class="item-info"><div class="item-name">${esc(c.target_name)}${RC.callbackDue(c, person, t) ? ' <span class="badge badge-warning">🟡 Call back due</span>' : ''}</div>
+        <div class="item-sub">${c.org_name ? esc(c.org_name) + ' · ' : ''}${esc(c.open_lines)} open refresher${c.open_lines === 1 ? '' : 's'}</div></div>
+      <button class="btn-ghost btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button></div>`).join('')
+    : '<div class="muted" style="font-size:0.82rem">No cards held right now.</div>';
+
+  // recent wins
+  $('people-wins').innerHTML = recent.data.length ? recent.data.map((w) => `<div class="people-row">
+      <div class="item-info"><div class="item-name"><a href="${esc(RC.profileUrl(w.contact_id))}" target="_blank" rel="noopener">${esc((w.students && w.students.full_name) || `Contact ${w.contact_id}`)} →</a>
+        · ${esc(w.refresher_type)}</div>
+        <div class="item-sub">${w.won_class_date ? `class ${esc(RC.fmtDate(w.won_class_date))} · ` : ''}booked ${esc(RC.fmtDate(w.won_booked_on || w.won_at))}</div></div>
+      <span class="badge badge-success">🟢 Won</span></div>`).join('')
+    : '<div class="muted" style="font-size:0.82rem">No wins yet.</div>';
+
+  // team comparison
+  const cmp = RC.teamComparison(stats.data);
+  $('people-compare-sub').textContent = `Calls logged and refreshers won per person · ${period}`;
+  $('people-compare-box').style.height = `${Math.max(140, 46 * cmp.labels.length + 70)}px`;
+  if (PEOPLE.compare) PEOPLE.compare.destroy();
+  PEOPLE.compare = new Chart($('people-compare'), {
+    type: 'bar',
+    data: { labels: cmp.labels, datasets: [
+      { label: 'Calls logged', data: cmp.calls, backgroundColor: 'rgba(184,169,222,0.7)', borderColor: CALLS_COLOUR, borderWidth: 1.5, borderRadius: 6 },
+      { label: 'Refreshers won', data: cmp.wins, backgroundColor: 'rgba(158,207,158,0.7)', borderColor: WINS_COLOUR, borderWidth: 1.5, borderRadius: 6 },
+    ] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: chartLegend },
+               scales: { x: { ...chartAxes.y, grid: { color: 'rgba(0,0,0,0.04)' } }, y: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#2d2d3a' } } } },
+  });
+}
+
 // ---------- admin ----------
 async function renderAdmin() {
   const body = $('admin-body');
@@ -1404,6 +1572,7 @@ async function saveStaff() {
 function onMoreAction(act, btn) {
   switch (act) {
     case 'period': DASH.period = btn.dataset.value; drawTeam(); break;
+    case 'people-period': PEOPLE.period = btn.dataset.value; renderPeople(); break;
     case 'cohort-type': DASH.type = btn.dataset.value; drawCohort(); break;
     case 'cohort-state': DASH.state = btn.dataset.value; drawCohort(); break;
     case 'staff-add': openStaffModal(null); break;
@@ -1431,6 +1600,7 @@ document.addEventListener('change', (e) => {
     updateSelCount();
   }
   if (e.target.id === 'cf-status') { S.cardView.filters.status = e.target.value; drawCardTable(); }
+  if (e.target.id === 'people-person') { PEOPLE.person = e.target.value; renderPeople(); }
 });
 $('dnc-modal').addEventListener('click', (e) => { if (e.target.id === 'dnc-modal') $('dnc-modal').classList.remove('open'); });
 

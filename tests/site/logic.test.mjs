@@ -282,3 +282,34 @@ test('signInError tells "no account" apart from "account not activated yet"', ()
   assert.match(RC.signInError('over_email_send_rate_limit', 'Email rate limit exceeded'), /wait/i);
   assert.equal(RC.signInError(undefined, 'Something odd'), "Couldn't send the code: Something odd");
 });
+
+// ---------- People page ----------
+test('weekStarts: Mondays, oldest first, ending with this week', () => {
+  assert.deepEqual(plain(RC.weekStarts('2026-11-18', 3)), ['2026-11-02', '2026-11-09', '2026-11-16']);
+  assert.deepEqual(plain(RC.weekStarts('2026-11-22', 1)), ['2026-11-16']);              // Sunday belongs to the week begun Monday
+  assert.deepEqual(plain(RC.weekStarts('2026-03-02', 2)), ['2026-02-23', '2026-03-02']);
+});
+
+test('weeklySeries counts calls and wins per week and ignores older dates', () => {
+  const s = plain(RC.weeklySeries(['2026-11-16', '2026-11-22', '2026-11-10', '2026-10-01'], ['2026-11-17'], '2026-11-18', 2));
+  assert.deepEqual(s, { labels: ['9 Nov', '16 Nov'], calls: [1, 2], wins: [0, 1] });
+  // a call at 11:30 pm Sunday Sydney time is Saturday afternoon UTC; it still counts in that Sunday's week
+  assert.equal(RC.sydneyToday(new Date('2026-11-22T12:30:00Z')), '2026-11-22');
+  assert.deepEqual(plain(RC.weeklySeries([], [], '2026-11-18', 2)), { labels: ['9 Nov', '16 Nov'], calls: [0, 0], wins: [0, 0] });
+});
+
+test('personTiles: current cards plus the period row; zeros for no activity', () => {
+  assert.deepEqual(plain(RC.personTiles(undefined, [], 'me', T)),
+    { held: 0, callbacks: 0, calls: 0, won: 0, pending: 0, lost: 0, rate: null });
+  const cards = [card({ card_key: 'a', claimed_by: 'me', callback_on: T, claimed_at: '2026-11-17T00:00:00Z' }),
+                 card({ card_key: 'b', claimed_by: 'me' }), card({ card_key: 'c', claimed_by: 'me', open_lines: 0 }),
+                 card({ card_key: 'd', claimed_by: 'them' })];
+  assert.deepEqual(plain(RC.personTiles({ calls_logged: 5, won: 1, pending: 2, lost: 1, win_rate: '0.5' }, cards, 'me', T)),
+    { held: 2, callbacks: 1, calls: 5, won: 1, pending: 2, lost: 1, rate: '0.5' });
+});
+
+test('teamComparison: most calls first, then wins, then name', () => {
+  const c = plain(RC.teamComparison([{ full_name: 'B', calls_logged: 3, won: 1 }, { full_name: 'A', calls_logged: 3, won: 2 },
+                                     { full_name: 'C', calls_logged: 9, won: 0 }]));
+  assert.deepEqual(c, { labels: ['C', 'A', 'B'], calls: [9, 3, 3], wins: [0, 2, 1] });
+});

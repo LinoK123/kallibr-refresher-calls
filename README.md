@@ -12,6 +12,14 @@ A shared call list for Kallibr staff to ring bookers about overdue and upcoming 
 - **My cards:** your cards, with call-backs due today at the top. A card with no activity for 14 days and no call-back still to come goes back to the queue overnight.
 - **Card:** ring the booker, pick an outcome per refresher (or "Apply one outcome to all"), add notes and an optional call-back date, then **Save Call Log**.
 - **Dashboard:** totals, the team table (this week, this month, all time) and progress by month of each student's last course.
+- **People:** any team member's progress, opening on you. It shows:
+  - cards held and call-backs due, right now;
+  - calls, wins, pending, lost and win rate for the chosen period (the same figures as the Dashboard's team table);
+  - calls and wins per week over the last 12 weeks;
+  - their open cards and recent wins;
+  - a team comparison chart.
+
+  Everyone can see everyone.
 - **Admin (managers):** team members and the last 14 nightly updates.
 
 ## Adding, changing or removing a team member
