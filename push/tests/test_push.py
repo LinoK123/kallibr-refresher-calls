@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+import config
 import refresher_push
 from fixture import book, comp, set_synced
 from refresher_push import run
@@ -265,3 +266,66 @@ def test_push_places_students_with_the_current_booker(con, fake):
     run(con, fake, TODAY, NOW)
     [s] = fake.inserted("stage_students")
     assert (s["card_key"], s["target_name"]) == ("B:901", "Therese Stapleton")
+
+
+# ---- Monday call-back email wiring ----
+
+@pytest.fixture
+def cli(con, tmp_path, monkeypatch):
+    """main() against the fixture database with a fake Supabase client; returns (fake, digest calls)."""
+    set_synced(con, NOW); students(con, 2); con.close()
+    fake, calls = FakeClient(), []
+    monkeypatch.setattr(refresher_push, "credentials", lambda: ("https://x.supabase.co", "k"))
+    monkeypatch.setattr(refresher_push, "Client", lambda url, key: fake)
+    monkeypatch.setattr(refresher_push, "_now", lambda: NOW)
+    monkeypatch.setattr(refresher_push, "email_credentials", lambda: ("sender@gmail.com", "app-pw"))
+
+    def fake_run_digest(client, today, marker_path, sender, force=False, only=None):
+        calls.append(dict(today=today, marker=marker_path, force=force, only=only))
+        return "Call-back emails: 2 sent, 0 failed"
+    monkeypatch.setattr(refresher_push.callback_digest, "run_digest", fake_run_digest)
+    return fake, calls, tmp_path
+
+
+def test_call_back_emails_go_out_after_an_ok_push(cli, capsys):
+    fake, calls, tmp = cli
+    assert refresher_push.main(["--db", str(tmp / "t.db")]) == 0
+    assert calls == [dict(today=TODAY, marker=tmp / config.DIGEST_MARKER, force=False, only=None)]
+    out = capsys.readouterr().out
+    assert "Refresher push ok" in out and "Call-back emails: 2 sent" in out
+
+
+def test_no_call_back_emails_after_a_dry_run(cli):
+    fake, calls, tmp = cli
+    assert refresher_push.main(["--db", str(tmp / "t.db"), "--dry-run"]) == 0
+    assert calls == []
+
+
+def test_email_not_set_up_is_reported_and_the_push_still_succeeds(cli, monkeypatch, capsys):
+    fake, calls, tmp = cli
+    monkeypatch.setattr(refresher_push, "email_credentials", lambda: None)
+    assert refresher_push.main(["--db", str(tmp / "t.db")]) == 0
+    assert calls == [] and "not set up" in capsys.readouterr().out
+
+
+def test_an_email_crash_never_fails_the_push(cli, monkeypatch, capsys):
+    fake, calls, tmp = cli
+
+    def boom(*a, **k):
+        raise RuntimeError("no network")
+    monkeypatch.setattr(refresher_push.callback_digest, "run_digest", boom)
+    assert refresher_push.main(["--db", str(tmp / "t.db")]) == 0
+    assert "Call-back emails failed" in capsys.readouterr().out
+
+
+def test_send_digest_now_to_one_address_skips_the_push(cli, capsys):
+    fake, calls, tmp = cli
+    assert refresher_push.main(["--db", str(tmp / "t.db"), "--send-digest", "--to", "jo@kallibr.com.au"]) == 0
+    assert calls == [dict(today=TODAY, marker=tmp / config.DIGEST_MARKER, force=True, only="jo@kallibr.com.au")]
+    assert fake.writes == []
+
+
+def test_email_credentials_from_env(monkeypatch):
+    monkeypatch.setenv("REFRESHER_EMAIL_USER", "sender@gmail.com")
+    monkeypatch.setenv("REFRESHER_EMAIL_PASSWORD", "pw")
+    assert refresher_push.email_credentials() == ("sender@gmail.com", "pw")

@@ -358,3 +358,25 @@ test('teamTotals adds up everyone and counts every held card', () => {
   assert.deepEqual(plain(RC.teamTotals(rows, cards, T)), { held: 2, callbacks: 1, calls: 8, won: 3, pending: 1, lost: 2, rate: 0.6 });
   assert.deepEqual(plain(RC.teamTotals([], [], T)), { held: 0, callbacks: 0, calls: 0, won: 0, pending: 0, lost: 0, rate: null });
 });
+
+// ---------- Call-backs list ----------
+test('callbackList buckets the holder\'s call-backs and skips leftovers, unheld and finished cards', () => {
+  const c = (key, o) => card({ card_key: key, target_name: key, claimed_by: 'me', claimed_at: '2026-11-01T00:00:00Z', ...o });
+  const cards = [
+    c('later', { callback_on: '2026-11-23' }), c('week', { callback_on: '2026-11-22' }), c('today', { callback_on: '2026-11-18' }),
+    c('over', { callback_on: '2026-11-13' }), c('none', { callback_on: null }),
+    c('leftover', { callback_on: '2026-10-20' }),                                   // set before I took the card
+    c('queue', { claimed_by: null, callback_on: '2026-11-19' }),
+    c('done', { callback_on: '2026-11-19', open_lines: 0 }),
+    c('theirs', { claimed_by: 'them', callback_on: '2026-11-19' }),
+  ];
+  const mine = plain(RC.callbackList(cards, 'me', T).map((x) => [x.card.card_key, x.bucket, x.date]));
+  assert.deepEqual(mine, [['over', 'overdue', '2026-11-13'], ['today', 'today', '2026-11-18'],
+                          ['week', 'week', '2026-11-22'], ['later', 'later', '2026-11-23']]);
+  assert.deepEqual(plain(RC.callbackList(cards, 'all', T).map((x) => x.card.card_key)), ['over', 'today', 'theirs', 'week', 'later']);
+});
+
+test('fmtWeekday', () => {
+  assert.equal(RC.fmtWeekday('2026-11-20'), 'Fri 20 Nov');
+  assert.equal(RC.fmtWeekday('2026-11-16'), 'Mon 16 Nov');
+});

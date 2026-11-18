@@ -12,7 +12,8 @@ A shared call list for Kallibr staff to ring bookers about overdue and upcoming 
   - Click a column header to sort. Click again to reverse, and a third time to go back to the usual order.
   - **Take** claims a card for you; nobody else can work it until you release it.
 - **Card:** the same kind of filters, plus sortable columns, for the students on a card.
-- **My cards:** your cards, with call-backs due today at the top. A card with no activity for 14 days and no call-back still to come goes back to the queue overnight.
+- **My cards:** your cards. **📅 Your call-backs** at the top lists every call-back you've set, soonest first (overdue, today, this week, later), each with **Open →**. Columns sort like the Queue. A card with no activity for 14 days and no call-back still to come goes back to the queue overnight.
+- **Monday email:** each team member with overdue call-backs or call-backs due this week gets one email listing them. It comes from the nightly push on the first run of each week, normally Monday morning (see "Call-back emails" below).
 - **Card:** ring the booker, pick an outcome per refresher (or "Apply one outcome to all"), add notes and an optional call-back date, then **Save Call Log**.
 - **Dashboard:** totals, the team table (this week, this month, all time) and progress by month of each student's last course.
 - **People:** any team member's progress, opening on you. **All team members** shows the whole team together, including who holds each card and who won each refresher. It shows:
@@ -99,7 +100,18 @@ py push/refresher_push.py --set-key          # once per PC: project URL + secret
 py push/refresher_push.py --dry-run          # work everything out, write nothing, print one line
 py push/refresher_push.py                    # the real push (the nightly job runs this)
 py push/refresher_push.py --allow-reversals  # only after checking an "aborted: ... would lose their booking" run
+py push/refresher_push.py --set-email        # once per PC: the Gmail sender + its app password, for the Monday emails
+py push/refresher_push.py --send-digest --to you@kallibr.com.au   # send this week's call-back email now, to one person
 ```
+
+### Call-back emails
+
+- **What triggers them:** after a successful push, the first run of each Monday-to-Sunday week emails every active team member who has overdue call-backs or call-backs due by Sunday. People with none get nothing. A call-back left over from a card's previous holder doesn't count.
+- **What they contain:** the card name, organisation and date, plus a link to the site.
+- **Never twice a week:** `KallibrAgent\refresher_digest_week.txt` holds the Monday of the week last sent. Delete it to let this week send again.
+- **The sender** is the same Gmail account as the sign-in codes (already allowed in Microsoft 365). Its address and app password live in Windows Credential Manager, set with `--set-email`.
+- **In `sync.log`:** the push's last line reads "Call-back emails: n sent, n failed". "Not set up" means `--set-email` hasn't been run. An email problem never fails the push.
+- `--send-digest` sends this week's emails straight away (all of them, or just `--to` one address) without a push. With `--to`, it doesn't count as this week's send.
 
 How it is wired on the designated PC:
 

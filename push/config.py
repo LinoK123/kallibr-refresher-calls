@@ -18,6 +18,13 @@ STAFF_ENTERED_MIN = 50                 # a requester who entered this many booki
 CURRENT_BOOKER_MONTHS = 12             # a booker counts as current if they booked for the company within this
 IGNORE_BOOKER_CONTACT_IDS = ()         # extra contact IDs never treated as bookers
 
+# Monday call-back email (sent by the nightly push on the designated PC)
+SITE_URL = "https://linok123.github.io/kallibr-refresher-calls/"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+EMAIL_FROM_NAME = "Kallibr Refresher Calls"
+DIGEST_MARKER = "refresher_digest_week.txt"     # in the KallibrAgent folder: the Monday of the week last sent
+
 MAX_SOURCE_AGE_HOURS = 36
 MAX_LINE_DROP = 0.20
 # A night that would take back more wins than this is treated as bad data and stopped:

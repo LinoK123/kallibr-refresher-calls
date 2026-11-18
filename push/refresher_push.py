@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config  # noqa: E402
+import callback_digest  # noqa: E402
 from rules import build_lines, check_lines, course_history, place_students  # noqa: E402
 from supabase_client import Client, PushError  # noqa: E402
 
@@ -208,32 +209,79 @@ def summary(out: dict) -> str:
     return f"Refresher push {out['result']}: {out['message']}"
 
 
+def email_credentials() -> tuple[str, str] | None:
+    """The Gmail sender and app password: env vars first, then Windows Credential Manager (--set-email)."""
+    user = os.environ.get("REFRESHER_EMAIL_USER") or _keyring_get("email_user")
+    password = os.environ.get("REFRESHER_EMAIL_PASSWORD") or _keyring_get("email_password")
+    return (user, password) if user and password else None
+
+
+def set_email():
+    import getpass
+    import keyring
+    user = input("Gmail address that sends the emails: ").strip()
+    if "@" not in user:
+        raise SystemExit("That isn't an email address. Nothing saved.")
+    password = getpass.getpass("Gmail app password (16 letters, hidden): ").replace(" ", "").strip()
+    if not password:
+        raise SystemExit("No app password typed. Nothing saved.")
+    keyring.set_password(KEYRING_SERVICE, "email_user", user)
+    keyring.set_password(KEYRING_SERVICE, "email_password", password)
+    print(f"Saved to Windows Credential Manager under '{KEYRING_SERVICE}'. "
+          "Test it with:  py refresher_push.py --send-digest --to <your email>")
+
+
+def send_call_back_emails(client, today: date, marker_path: Path, force: bool = False, only: str | None = None) -> str:
+    """The Monday call-back emails. Never raises: problems come back as the summary line."""
+    creds = email_credentials()
+    if not creds:
+        return "Call-back emails not set up (run: py refresher_push.py --set-email)"
+    try:
+        return callback_digest.run_digest(client, today, marker_path, callback_digest.smtp_sender(*creds),
+                                          force=force, only=only)
+    except Exception as e:
+        return f"Call-back emails failed: {type(e).__name__}: {str(e)[:200]}"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Push refresher lines and cards to Supabase.")
     ap.add_argument("--db", default=str(DEFAULT_DB), help="path to axc_agent.db (opened read-only)")
     ap.add_argument("--dry-run", action="store_true", help="work everything out, write nothing")
     ap.add_argument("--set-key", action="store_true", help="store the Supabase URL and secret key")
+    ap.add_argument("--set-email", action="store_true", help="store the Gmail sender and app password")
+    ap.add_argument("--send-digest", action="store_true", help="send this week's call-back emails now (no push)")
+    ap.add_argument("--to", help="with --send-digest: send only to this address")
     ap.add_argument("--allow-reversals", action="store_true",
                     help="push even though many won refreshers would lose their booking (after checking)")
     a = ap.parse_args(argv)
     if a.set_key:
         set_key()
         return 0
+    if a.set_email:
+        set_email()
+        return 0
     url, key = credentials()
     db = Path(a.db).resolve()
+    marker = db.parent / config.DIGEST_MARKER
+    if a.send_digest:
+        print(send_call_back_emails(Client(url, key), _now().date(), marker, force=True, only=a.to))
+        return 0
     if not db.exists():
         print(f"Refresher push failed: no database at {db}")
         return 1
     con = sqlite3.connect(f"{db.as_uri()}?mode=ro", uri=True)
+    client = Client(url, key)
     try:
         now = _now()
         try:
-            out = run(con, Client(url, key), now.date(), now, dry_run=a.dry_run, allow_reversals=a.allow_reversals)
+            out = run(con, client, now.date(), now, dry_run=a.dry_run, allow_reversals=a.allow_reversals)
         except PushError as e:
             out = {"result": "failed", "message": str(e)[:500], "lines": 0, "students": 0, "checks": 0, "history": 0}
     finally:
         con.close()
     print(summary(out))
+    if out["result"] == "ok":                    # the Monday call-back emails, once a week
+        print(send_call_back_emails(client, now.date(), marker))
     return 0 if out["result"] in ("ok", "dry-run") else 1
 
 

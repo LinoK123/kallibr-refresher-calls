@@ -416,6 +416,7 @@ a:hover{text-decoration:underline;}
     <div class="page-header">
       <div><div class="page-title">My cards</div><div class="page-subtitle">Cards you've taken, with call-backs due today at the top</div></div>
     </div>
+    <div class="card"><div class="section-title">📅 Your call-backs</div><div id="mine-callbacks"></div></div>
     <div id="mine-table"></div>
   </div>
 
@@ -448,6 +449,7 @@ a:hover{text-decoration:underline;}
       <div class="card"><div class="section-title" id="people-cards-title">🗂️ Their cards</div><div id="people-cards"></div></div>
       <div class="card"><div class="section-title" id="people-wins-title">🟢 Recent wins</div><div id="people-wins"></div></div>
     </div>
+    <div class="card"><div class="section-title" id="people-callbacks-title">📅 Call-backs</div><div id="people-callbacks"></div></div>
     <div class="card">
       <div class="card-title">Team comparison</div><div class="card-subtitle" id="people-compare-sub">Calls logged and refreshers won per person</div>
       <div style="position:relative" id="people-compare-box"><canvas id="people-compare" role="img" aria-label="Calls and wins per team member"></canvas></div>
@@ -797,6 +799,23 @@ const RC = (() => {
       rate: row && row.win_rate !== undefined ? row.win_rate : null,
     };
   }
+  // ---- call-backs ----
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const fmtWeekday = (iso) => `${DAYS[new Date(dayNo(iso) * 86400000).getUTCDay()]} ${+iso.slice(8, 10)} ${MONTHS[+iso.slice(5, 7) - 1]}`;
+  // A held card's call-back counts if it was set while the current holder held it (same rule as callbackDue).
+  function callbackList(cards, staffId, todayIso) {
+    const sunday = isoOfDay(dayNo(periodStart('week', todayIso)) + 6);
+    return cards
+      .filter((c) => c.claimed_by && (staffId === 'all' || c.claimed_by === staffId) && c.open_lines > 0 && c.callback_on
+        && (!c.claimed_at || c.callback_on >= sydneyToday(new Date(c.claimed_at))))
+      .map((c) => ({
+        card: c, date: c.callback_on,
+        bucket: c.callback_on < todayIso ? 'overdue' : c.callback_on === todayIso ? 'today' : c.callback_on <= sunday ? 'week' : 'later',
+      }))
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1
+        : String(a.card.target_name).localeCompare(String(b.card.target_name), 'en-AU')));
+  }
+
   function teamTotals(rows, cards, todayIso) {
     const held = cards.filter((c) => c.claimed_by && c.open_lines > 0);
     const sum = (f) => rows.reduce((n, r) => n + Number(r[f] || 0), 0);
@@ -856,7 +875,7 @@ const RC = (() => {
            queueCards, myCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
-           weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort,
+           weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort, callbackList, fmtWeekday,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
 if (typeof module !== 'undefined') module.exports = RC;
@@ -1034,9 +1053,28 @@ function clearQueueFilters() {
   renderQueue();
 }
 
+// ---------- call-backs ----------
+const CALLBACK_BADGE = { overdue: ['badge-danger', '🔴 Overdue'], today: ['badge-warning', '🟡 Today'],
+                         week: ['badge-info', 'This week'], later: ['badge-neutral', 'Later'] };
+function callbackRows(items, showHolder, emptyText) {
+  if (!items.length) return `<div class="muted" style="font-size:0.82rem">${esc(emptyText)}</div>`;
+  return items.map(({ card: c, bucket, date }) => {
+    const [cls, label] = CALLBACK_BADGE[bucket];
+    const when = bucket === 'overdue' ? `was due ${RC.fmtWeekday(date)}` : bucket === 'today' ? 'Today' : RC.fmtWeekday(date);
+    return `<div class="people-row">
+      <span class="badge ${cls}" style="min-width:84px;text-align:center">${esc(label)}</span>
+      <div class="item-info"><div class="item-name">${esc(c.target_name)}</div>
+        <div class="item-sub">${c.org_name ? esc(c.org_name) : esc(KIND_LABEL[c.kind] || '')}${showHolder ? ` · held by ${esc(staffName(c.claimed_by))}` : ''}</div></div>
+      <span class="muted" style="font-size:0.8rem;white-space:nowrap">${esc(when)}</span>
+      <button class="btn-ghost btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button></div>`;
+  }).join('');
+}
+
 // ---------- my cards ----------
 function renderMine() {
   if (!S.me) return;
+  $('mine-callbacks').innerHTML = callbackRows(RC.callbackList(S.cards, S.me.id, today()), false,
+    'No call-backs set. When you save a call with a call-back date, it shows here.');
   // usual order: call-backs due first, then biggest; a clicked column overrides it until its third click
   const usual = RC.myCards(S.cards, S.me.id, today());
   const list = S.mineSort.key ? RC.sortCards(usual, S.mineSort.key, S.mineSort.dir) : usual;
@@ -1557,6 +1595,10 @@ async function renderPeople() {
         <div class="item-sub">${w.won_class_date ? `class ${esc(RC.fmtDate(w.won_class_date))} · ` : ''}booked ${esc(RC.fmtDate(w.won_booked_on || w.won_at))}${everyone ? ` · won by ${esc(staffName(w.won_by))}` : ''}</div></div>
       <span class="badge badge-success">🟢 Won</span></div>`).join('')
     : '<div class="muted" style="font-size:0.82rem">No wins yet.</div>';
+
+  // call-backs
+  $('people-callbacks-title').textContent = everyone ? '📅 Call-backs across the team' : '📅 Call-backs';
+  $('people-callbacks').innerHTML = callbackRows(RC.callbackList(S.cards, everyone ? 'all' : person, t), everyone, 'No call-backs set.');
 
   // team comparison
   const cmp = RC.teamComparison(stats.data);
