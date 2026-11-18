@@ -237,3 +237,41 @@ test('authLinkError explains an expired or used link, and ignores normal pages',
   assert.equal(RC.authLinkError(''), null);
   assert.equal(RC.authLinkError('#access_token=abc&type=magiclink'), null);
 });
+
+// ---------- Card view: filters and sortable headers ----------
+const CL = [
+  L(1, 1, 'Heights', '2026-01-10', 'not_called', { location: 'NSW', last_done: '2024-01-10' }),
+  L(2, 1, 'Confined Space', '2026-07-20', 'pending', { location: 'NSW', last_done: '2024-07-20' }),
+  L(3, 2, 'HSR', '2027-02-01', 'not_called', { location: 'QLD', last_done: '2026-02-01' }),
+  L(4, 3, 'Heights', '2025-12-01', 'won', { location: 'NSW', last_done: '2023-12-01' }),
+];
+const CS = [{ contact_id: 1, full_name: 'Raj Saharan' }, { contact_id: 2, full_name: 'Ann Brown' }, { contact_id: 3, full_name: 'Zed Young' }];
+const ids = (groups) => plain(groups.map((g) => [g.contact_id, g.rows.map((r) => r.id)]));
+
+test('filterGroups narrows rows and drops students left with none', () => {
+  const g = RC.groupLines(CL, CS, T);
+  assert.deepEqual(ids(RC.filterGroups(g, {}, T)), ids(g));
+  assert.deepEqual(ids(RC.filterGroups(g, { type: 'Heights' }, T)), [[1, [1]], [3, [4]]]);
+  assert.deepEqual(ids(RC.filterGroups(g, { state: 'QLD' }, T)), [[2, [3]]]);
+  assert.deepEqual(ids(RC.filterGroups(g, { due: 'overdue' }, T)), [[1, [1, 2]]]);      // open and due before today
+  assert.deepEqual(ids(RC.filterGroups(g, { due: 'upcoming' }, T)), [[2, [3]]]);
+  assert.deepEqual(ids(RC.filterGroups(g, { status: 'won' }, T)), [[3, [4]]]);
+  assert.deepEqual(ids(RC.filterGroups(g, { search: ' raj ' }, T)), [[1, [1, 2]]]);
+  assert.deepEqual(ids(RC.filterGroups(g, { type: 'Heights', status: 'not_called' }, T)), [[1, [1]]]);
+  assert.equal(RC.filterGroups(g, { type: 'Heights' }, T)[0].dueForBoth, true, 'badge still reflects all of the student\'s open refreshers');
+});
+
+test('sortGroups by each column, both directions, keeping a student\'s rows together', () => {
+  const g = RC.groupLines(CL, CS, T);
+  const order = (key, dir) => plain(RC.sortGroups(g, key, dir).map((x) => x.contact_id));
+  assert.deepEqual(order('due', 'asc'), [1, 2, 3]);          // the default: earliest open due first, finished last
+  assert.deepEqual(order('due', 'desc'), [2, 1, 3]);
+  assert.deepEqual(order('student', 'asc'), [2, 1, 3]);      // Ann, Raj, Zed
+  assert.deepEqual(order('student', 'desc'), [3, 1, 2]);
+  assert.deepEqual(order('refresher', 'asc'), [1, 3, 2]);    // Confined Space, Heights, HSR (as a person reads it)
+  assert.deepEqual(order('last_done', 'asc'), [3, 1, 2]);    // 2023-12, 2024-07, 2026-02 (each student's latest)
+  assert.deepEqual(order('last_done', 'desc'), [2, 1, 3]);
+  assert.deepEqual(order('status', 'asc'), [2, 1, 3]);       // not called, pending, won
+  assert.deepEqual(plain(RC.sortGroups(g, 'student', 'asc')[1].rows.map((r) => r.id)), [1, 2], 'rows inside a student keep their order');
+  assert.deepEqual(plain(g.map((x) => x.contact_id)), [1, 2, 3], 'does not reorder its input');
+});
