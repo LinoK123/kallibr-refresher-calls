@@ -22,13 +22,25 @@ A shared call list for Kallibr staff to ring bookers about overdue and upcoming 
 
 To remove someone, open **Admin → Edit**, untick **Active** and save. Their cards go straight back to the queue and they see nothing on their next request. You can also delete their user under Authentication → Users. You can't remove your own manager access, so another manager has to do that.
 
-Sign-in and invitation emails are sent through **Brevo** (free plan, up to 300 a day), with `lino.carballeiro@kallibr.com.au` as the sender. The Brevo SMTP login and key are entered in Supabase (Authentication → Emails → SMTP Settings) and live in the Brevo account, never in this repository. Without custom SMTP, Supabase only emails members of the Supabase organisation, two emails an hour. If invitations land in Junk, authenticate the kallibr.com.au domain in Brevo (Senders, Domains & Dedicated IPs → Domains), which means adding the DNS records it lists.
+Sign-in and invitation emails are sent through the custom SMTP account set in Supabase (Authentication → Emails → SMTP Settings): a dedicated Gmail account, sending through Gmail's own server with an app password. Without custom SMTP, Supabase only emails members of the Supabase organisation, two emails an hour. The app password lives only in Supabase and the Google account, never in this repository. A Kallibr-domain sender (for example through Brevo) needs kallibr.com.au authenticated first, because the domain's DMARC policy refuses unapproved senders.
+
+To set up or replace the Gmail sender:
+
+1. On the Google account, turn on 2-Step Verification.
+2. Create an app password named "Supabase" (Google Account → Security → 2-Step Verification → App passwords).
+3. In Supabase → Authentication → Emails → SMTP Settings, enable custom SMTP:
+   - sender email and username: the Gmail address
+   - sender name: `Kallibr Refresher Calls`
+   - host: `smtp.gmail.com`, port: `587`
+   - password: the app password
+
+If the app password is ever exposed, revoke it in the Google account and create a new one.
 
 ## Supabase settings that must stay as they are
 
 - **Authentication → Sign In / Providers:** new sign-ups **off**, email confirmation **on**. The site trusts the email address on a signed-in session, so these two settings are what stop strangers getting in.
 - **Authentication → URL Configuration:** Site URL and Redirect URLs = `https://linok123.github.io/kallibr-refresher-calls/`.
-- **Authentication → Emails → SMTP Settings:** custom SMTP on: host `smtp-relay.brevo.com`, port `587`, Brevo SMTP login and key. **Rate Limits:** emails per hour high enough for the team.
+- **Authentication → Emails → SMTP Settings:** custom SMTP on (Gmail: host `smtp.gmail.com`, port `587`, the Gmail address and its app password). **Rate Limits:** emails per hour high enough for the team. Gmail itself allows about 500 a day from a normal account.
 
 ## The nightly push
 
