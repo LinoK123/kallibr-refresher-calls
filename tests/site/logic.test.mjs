@@ -191,3 +191,29 @@ test('periodStart', () => {                                    // 18 Nov 2026 is
   assert.equal(RC.periodStart('all', '2026-11-18'), null);
 });
 test('fmtRate', () => { assert.equal(RC.fmtRate(0.5), '50%'); assert.equal(RC.fmtRate(null), '–'); assert.equal(RC.fmtRate('0.667'), '67%'); });
+
+// ---------- Final review fixes ----------
+test('callbackDue: only the holder, only call-backs set since they took the card', () => {
+  const c = (o) => card({ claimed_by: 'me', claimed_at: '2026-11-10T01:00:00Z', callback_on: '2026-11-18', ...o });
+  assert.equal(RC.callbackDue(c({}), 'me', T), true);
+  assert.equal(RC.callbackDue(c({ callback_on: '2026-11-12' }), 'me', T), true);      // overdue, set while I held it
+  assert.equal(RC.callbackDue(c({ claimed_by: null }), 'me', T), false);              // in the queue
+  assert.equal(RC.callbackDue(c({ claimed_by: 'them' }), 'me', T), false);
+  assert.equal(RC.callbackDue(c({ callback_on: '2026-11-25' }), 'me', T), false);     // not yet
+  assert.equal(RC.callbackDue(c({ callback_on: '2026-11-05' }), 'me', T), false);     // left by a previous holder
+  assert.equal(RC.callbackDue(c({ callback_on: null }), 'me', T), false);
+});
+
+test('myCards ignores a call-back left by a previous holder', () => {
+  const cards = [card({ card_key: 'old', claimed_by: 'me', claimed_at: '2026-11-17T23:00:00Z', callback_on: '2026-11-01', open_lines: 1 }),
+                 card({ card_key: 'big', claimed_by: 'me', claimed_at: '2026-11-17T23:00:00Z', open_lines: 9 })];
+  assert.deepEqual(plain(RC.myCards(cards, 'me', T).map((c) => c.card_key)), ['big', 'old']);
+});
+
+test('skippedNotice names each refresher that was booked meanwhile', () => {
+  const lines = [L(11, 1, 'Heights', '2026-03-07'), L(12, 2, 'HSR', '2026-04-01')];
+  assert.equal(RC.skippedNotice([], lines, STUDENTS), null);
+  assert.equal(RC.skippedNotice([11], lines, STUDENTS), 'Sam Lee · Heights was booked since you opened this card, so it stays as Won.');
+  assert.equal(RC.skippedNotice([11, 12], lines, STUDENTS),
+    'These were booked since you opened this card, so they stay as Won: Sam Lee · Heights; Kim Tran · HSR.');
+});

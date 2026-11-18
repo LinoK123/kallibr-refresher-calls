@@ -505,12 +505,30 @@ const RC = (() => {
 
   const queueCards = (cards) => cards.filter((c) => !c.claimed_by && !c.do_not_call && c.open_lines > 0);
 
+  // A call-back is due for the card's holder only, and only if it was set while they held it
+  // (a date left behind by a previous holder, or before an auto-release, is not theirs to chase).
+  function callbackDue(c, staffId, todayIso) {
+    if (!staffId || c.claimed_by !== staffId || !c.callback_on || c.callback_on > todayIso) return false;
+    return !c.claimed_at || c.callback_on >= sydneyToday(new Date(c.claimed_at));
+  }
+
   function myCards(cards, staffId, todayIso) {
     const mine = cards.filter((c) => c.claimed_by === staffId && c.open_lines > 0);
-    const due = mine.filter((c) => c.callback_on && c.callback_on <= todayIso)
+    const due = mine.filter((c) => callbackDue(c, staffId, todayIso))
       .sort((a, b) => (a.callback_on < b.callback_on ? -1 : a.callback_on > b.callback_on ? 1 : byQueueOrder(a, b)));
-    const rest = sortQueue(mine.filter((c) => !(c.callback_on && c.callback_on <= todayIso)));
+    const rest = sortQueue(mine.filter((c) => !callbackDue(c, staffId, todayIso)));
     return [...due, ...rest];
+  }
+
+  function skippedNotice(ids, lines, students) {
+    if (!ids || !ids.length) return null;
+    const names = new Map(students.map((s) => [s.contact_id, s.full_name]));
+    const label = (id) => {
+      const l = lines.find((x) => x.id === id);
+      return l ? `${names.get(l.contact_id) || 'A student'} · ${l.refresher_type}` : 'One refresher';
+    };
+    if (ids.length === 1) return `${label(ids[0])} was booked since you opened this card, so it stays as Won.`;
+    return `These were booked since you opened this card, so they stay as Won: ${ids.map(label).join('; ')}.`;
   }
 
   function staleBanner(lastOkFinishedAtIso, nowMs) {
@@ -639,7 +657,7 @@ const RC = (() => {
   const fmtRate = (x) => (x === null || x === undefined || x === '' ? '–' : `${Math.round(Number(x) * 100)}%`);
 
   return { PROFILE_URL, profileUrl, esc, sydneyToday, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
-           queueCards, myCards, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines, cardSummary,
+           queueCards, myCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
@@ -743,7 +761,7 @@ async function refresh() {
 }
 function updateMineCount() {
   if (!S.me) return;
-  const n = RC.myCards(S.cards, S.me.id, today()).filter((c) => c.callback_on && c.callback_on <= today()).length;
+  const n = S.cards.filter((c) => c.open_lines > 0 && RC.callbackDue(c, S.me.id, today())).length;
   $('mine-count').textContent = n;
   $('mine-count').classList.toggle('hidden', n === 0);
 }
@@ -751,7 +769,7 @@ function updateMineCount() {
 // ---------- queue ----------
 function cardRow(c, actions) {
   const due = c.earliest_due ? RC.dueLabel(c.earliest_due, today()) : null;
-  const callBack = c.callback_on && c.callback_on <= today()
+  const callBack = RC.callbackDue(c, S.me && S.me.id, today())
     ? ' <span class="badge badge-warning">🟡 Call back today</span>' : '';
   return `<tr>
     <td><div class="cell-name">${esc(c.target_name)}${callBack}</div><div class="cell-sub">${esc(KIND_LABEL[c.kind] || '')}</div></td>
@@ -1026,11 +1044,10 @@ async function saveCall(dncCard) {
     return;
   }
   const skipped = (data && data.skipped_line_ids) || [];
+  const notice = RC.skippedNotice(skipped, S.cardData.lines, S.cardData.students);
   toast('Call log saved ✓');
   await renderCard(key);
-  S.cardNotice = skipped.length
-    ? `${skipped.length} refresher${skipped.length === 1 ? ' was' : 's were'} booked since you opened this card, so ${skipped.length === 1 ? 'it stays' : 'they stay'} as Won.`
-    : null;
+  S.cardNotice = notice;
   if (S.cardNotice) drawCard();
   loadCards().catch(() => {});
 }
