@@ -313,3 +313,43 @@ test('teamComparison: most calls first, then wins, then name', () => {
                                      { full_name: 'C', calls_logged: 9, won: 0 }]));
   assert.deepEqual(c, { labels: ['C', 'A', 'B'], calls: [9, 3, 3], wins: [0, 2, 1] });
 });
+
+// ---------- Queue sorting ----------
+test('sortCards by each queue column, both ways; no key keeps the usual queue order', () => {
+  const cards = [
+    card({ card_key: 'a', target_name: 'Bea', org_name: 'Zeta Pty', locations: ['VIC'], open_lines: 3, overdue_lines: 0, earliest_due: '2027-01-01' }),
+    card({ card_key: 'b', target_name: 'adam', org_name: null, locations: ['NSW', 'QLD'], open_lines: 9, overdue_lines: 5, earliest_due: '2026-02-01' }),
+    card({ card_key: 'c', target_name: 'Cal', org_name: 'Acme', locations: [], open_lines: 1, overdue_lines: 1, earliest_due: null }),
+  ];
+  const keys = (key, dir) => plain(RC.sortCards(cards, key, dir).map((c) => c.card_key));
+  assert.deepEqual(keys(null), ['b', 'a', 'c']);                  // usual order: biggest first
+  assert.deepEqual(keys('name', 'asc'), ['b', 'a', 'c']);         // adam, Bea, Cal (case-insensitive)
+  assert.deepEqual(keys('name', 'desc'), ['c', 'a', 'b']);
+  assert.deepEqual(keys('org', 'asc'), ['c', 'a', 'b']);          // Acme, Zeta Pty, then blank last
+  assert.deepEqual(keys('org', 'desc'), ['a', 'c', 'b']);         // blanks stay last
+  assert.deepEqual(keys('state', 'asc'), ['b', 'a', 'c']);        // NSW…, VIC, none last
+  assert.deepEqual(keys('open', 'desc'), ['b', 'a', 'c']);
+  assert.deepEqual(keys('open', 'asc'), ['c', 'a', 'b']);
+  assert.deepEqual(keys('overdue', 'desc'), ['b', 'c', 'a']);
+  assert.deepEqual(keys('due', 'asc'), ['b', 'a', 'c']);          // no due date last
+  assert.deepEqual(keys('due', 'desc'), ['a', 'b', 'c']);
+  assert.deepEqual(plain(cards.map((c) => c.card_key)), ['a', 'b', 'c'], 'does not reorder its input');
+});
+
+test('nextSort cycles: natural direction, reversed, then back to the usual order', () => {
+  assert.deepEqual(plain(RC.nextSort({ key: null, dir: null }, 'name')), { key: 'name', dir: 'asc' });
+  assert.deepEqual(plain(RC.nextSort({ key: 'name', dir: 'asc' }, 'name')), { key: 'name', dir: 'desc' });
+  assert.deepEqual(plain(RC.nextSort({ key: 'name', dir: 'desc' }, 'name')), { key: null, dir: null });
+  assert.deepEqual(plain(RC.nextSort({ key: 'name', dir: 'asc' }, 'open')), { key: 'open', dir: 'desc' });   // counts: most first
+  assert.deepEqual(plain(RC.nextSort({ key: 'open', dir: 'desc' }, 'open')), { key: 'open', dir: 'asc' });
+});
+
+// ---------- People: All team members ----------
+test('teamTotals adds up everyone and counts every held card', () => {
+  const rows = [{ calls_logged: 5, won: 2, pending: 1, lost: 2 }, { calls_logged: 3, won: 1, pending: 0, lost: 0 }];
+  const cards = [card({ card_key: 'a', claimed_by: 'u1', callback_on: T, claimed_at: '2026-11-17T00:00:00Z' }),
+                 card({ card_key: 'b', claimed_by: 'u2' }), card({ card_key: 'c', claimed_by: null }),
+                 card({ card_key: 'd', claimed_by: 'u2', open_lines: 0 })];
+  assert.deepEqual(plain(RC.teamTotals(rows, cards, T)), { held: 2, callbacks: 1, calls: 8, won: 3, pending: 1, lost: 2, rate: 0.6 });
+  assert.deepEqual(plain(RC.teamTotals([], [], T)), { held: 0, callbacks: 0, calls: 0, won: 0, pending: 0, lost: 0, rate: null });
+});

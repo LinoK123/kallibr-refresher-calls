@@ -406,6 +406,7 @@ a:hover{text-decoration:underline;}
       </select>
       <input class="search-input" id="f-search" style="max-width:300px" placeholder="🔍  Search organisation or booker…" aria-label="Search organisation or booker">
       <span class="muted" style="font-size:0.8rem" id="queue-count"></span>
+      <button class="link-btn hidden" id="queue-clear" data-act="queue-clear">Clear filters</button>
     </div>
     <div id="queue-table"></div>
   </div>
@@ -444,8 +445,8 @@ a:hover{text-decoration:underline;}
       <div style="position:relative;height:260px"><canvas id="people-weekly" role="img" aria-label="Calls and wins per week for the chosen team member"></canvas></div>
     </div>
     <div class="grid-2">
-      <div class="card"><div class="section-title">🗂️ Their cards</div><div id="people-cards"></div></div>
-      <div class="card"><div class="section-title">🟢 Recent wins</div><div id="people-wins"></div></div>
+      <div class="card"><div class="section-title" id="people-cards-title">🗂️ Their cards</div><div id="people-cards"></div></div>
+      <div class="card"><div class="section-title" id="people-wins-title">🟢 Recent wins</div><div id="people-wins"></div></div>
     </div>
     <div class="card">
       <div class="card-title">Team comparison</div><div class="card-subtitle" id="people-compare-sub">Calls logged and refreshers won per person</div>
@@ -543,6 +544,34 @@ const RC = (() => {
   }
 
   const queueCards = (cards) => cards.filter((c) => !c.claimed_by && !c.do_not_call && c.open_lines > 0);
+
+  // Queue column sorting. Blank values always sort last; ties fall back to the usual queue order.
+  const CARD_SORT = {
+    name: { natural: 'asc', get: (c) => (c.target_name ? String(c.target_name).toLowerCase() : null) },
+    org: { natural: 'asc', get: (c) => (c.org_name ? String(c.org_name).toLowerCase() : null) },
+    state: { natural: 'asc', get: (c) => ((c.locations || []).length ? [...c.locations].sort().join(' ') : null) },
+    open: { natural: 'desc', get: (c) => c.open_lines },
+    overdue: { natural: 'desc', get: (c) => c.overdue_lines },
+    due: { natural: 'asc', get: (c) => c.earliest_due || null },
+  };
+  function sortCards(cards, key, dir) {
+    const col = CARD_SORT[key];
+    if (!col) return sortQueue(cards);
+    const sign = dir === 'desc' ? -1 : 1;
+    return [...cards].sort((a, b) => {
+      const ka = col.get(a), kb = col.get(b);
+      if (ka == null || kb == null) return ka == null && kb == null ? byQueueOrder(a, b) : (ka == null ? 1 : -1);
+      const c = typeof ka === 'string' ? ka.localeCompare(kb, 'en-AU') : ka - kb;
+      return c !== 0 ? sign * c : byQueueOrder(a, b);
+    });
+  }
+  // Header clicks: natural direction, then reversed, then back to the usual order.
+  function nextSort(current, key) {
+    const natural = (CARD_SORT[key] || {}).natural || 'asc';
+    if (current.key !== key) return { key, dir: natural };
+    if (current.dir === natural) return { key, dir: natural === 'asc' ? 'desc' : 'asc' };
+    return { key: null, dir: null };
+  }
 
   // A call-back is due for the card's holder only, and only if it was set while they held it
   // (a date left behind by a previous holder, or before an auto-release, is not theirs to chase).
@@ -767,6 +796,17 @@ const RC = (() => {
       rate: row && row.win_rate !== undefined ? row.win_rate : null,
     };
   }
+  function teamTotals(rows, cards, todayIso) {
+    const held = cards.filter((c) => c.claimed_by && c.open_lines > 0);
+    const sum = (f) => rows.reduce((n, r) => n + Number(r[f] || 0), 0);
+    const won = sum('won'), lost = sum('lost');
+    return {
+      held: held.length,
+      callbacks: held.filter((c) => callbackDue(c, c.claimed_by, todayIso)).length,
+      calls: sum('calls_logged'), won, pending: sum('pending'), lost,
+      rate: won + lost ? Math.round((won / (won + lost)) * 1000) / 1000 : null,
+    };
+  }
   function teamComparison(rows) {
     const sorted = [...rows].sort((a, b) => (b.calls_logged - a.calls_logged) || (b.won - a.won)
       || String(a.full_name).localeCompare(String(b.full_name), 'en-AU'));
@@ -815,7 +855,7 @@ const RC = (() => {
            queueCards, myCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary,
            buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
-           weekStarts, weeklySeries, personTiles, teamComparison,
+           weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
 if (typeof module !== 'undefined') module.exports = RC;
@@ -835,7 +875,8 @@ const esc = RC.esc;
 const S = {
   sb: null, me: null, cards: [], staff: [], lastOk: null, page: 'queue', prevPage: 'queue', cardKey: null,
   cardData: null, cardNotice: null, cardView: null,
-  filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, entering: false,
+  filters: { state: '', type: '', due: '', kind: '', search: '' }, queuePage: 0, queueSort: { key: null, dir: null },
+  entering: false,
 };
 const today = () => RC.sydneyToday(new Date());
 
@@ -939,10 +980,18 @@ function cardRow(c, actions) {
     <td><div class="actions">${actions}</div></td>
   </tr>`;
 }
-function cardTable(rows, pager) {
+const CARD_COLUMNS = [['name', 'Booker or student', ''], ['org', 'Organisation', ''], ['state', 'State', ''],
+                      ['open', 'Refreshers', 'num'], ['overdue', 'Overdue', 'num'], ['due', 'Earliest due', '']];
+// sort: the current {key, dir} when the headers can sort (the Queue); omitted for plain headers (My cards)
+function cardTable(rows, pager, sort) {
+  const head = CARD_COLUMNS.map(([key, label, cls]) => {
+    if (!sort) return `<th class="${cls}">${label}</th>`;
+    const on = sort.key === key;
+    return `<th class="sortable ${cls}" data-act="queue-sort" data-sort="${key}" title="Sort by ${label.toLowerCase()}"
+      aria-sort="${on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${label}${on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
+  }).join('');
   return `<div class="table-wrap"><div class="table-scroll"><table class="table">
-    <thead><tr><th>Booker or student</th><th>Organisation</th><th>State</th><th class="num">Refreshers</th>
-      <th class="num">Overdue</th><th>Earliest due</th><th></th></tr></thead>
+    <thead><tr>${head}<th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>${pager || ''}</div>`;
 }
 function pager(total, page) {
@@ -957,10 +1006,11 @@ function pager(total, page) {
 function renderQueue() {
   if (!S.me) return;
   const all = RC.queueCards(S.cards);
-  const list = RC.sortQueue(RC.filterCards(all, S.filters));
+  const list = RC.sortCards(RC.filterCards(all, S.filters), S.queueSort.key, S.queueSort.dir);
   const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   S.queuePage = Math.min(S.queuePage, pages - 1);
   $('queue-count').textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
+  $('queue-clear').classList.toggle('hidden', !Object.values(S.filters).some(Boolean));
   document.querySelectorAll('#queue-filters .pill').forEach((p) =>
     p.classList.toggle('active', S.filters[p.dataset.filter] === p.dataset.value));
   if (!all.length) {
@@ -973,7 +1023,14 @@ function renderQueue() {
   }
   const rows = list.slice(S.queuePage * PAGE_SIZE, (S.queuePage + 1) * PAGE_SIZE).map((c) => cardRow(c,
     `<button class="btn-primary btn-sm" data-act="take" data-key="${esc(c.card_key)}">Take</button>`)).join('');
-  $('queue-table').innerHTML = cardTable(rows, pager(list.length, S.queuePage));
+  $('queue-table').innerHTML = cardTable(rows, pager(list.length, S.queuePage), S.queueSort);
+}
+function clearQueueFilters() {
+  S.filters = { state: '', type: '', due: '', kind: '', search: '' };
+  $('f-kind').value = '';
+  $('f-search').value = '';
+  S.queuePage = 0;
+  renderQueue();
 }
 
 // ---------- my cards ----------
@@ -1357,7 +1414,7 @@ async function drawKpis() {
     kpi('accent-brand', 'Total refreshers', k.total, 'Everyone listed so far') +
     kpi('accent-neutral', 'Not called', k.not_called, 'No outcome logged yet') +
     kpi('accent-warning', '🟡 Pending', k.pending, 'Called, not settled') +
-    kpi('accent-success', '🟢 Won', k.won, `${esc(k.booked_without_call.toLocaleString('en-AU'))} booked without a call`) +
+    kpi('accent-success', '🟢 Won', k.won, 'Booked') +
     kpi('accent-danger', '🔴 Lost', k.lost, 'Not needed, elsewhere, left or do not call');
 }
 async function drawCohort() {
@@ -1417,24 +1474,28 @@ const chartLegend = { display: true, position: 'bottom', labels: { font: { size:
 
 async function renderPeople() {
   const active = S.staff.filter((s) => s.active);
-  if (!PEOPLE.person || !active.some((s) => s.id === PEOPLE.person)) PEOPLE.person = S.me.id;
+  if (!PEOPLE.person || (PEOPLE.person !== 'all' && !active.some((s) => s.id === PEOPLE.person))) PEOPLE.person = S.me.id;
   $('people-controls').innerHTML = `
     <select class="form-select" id="people-person" style="width:auto;min-width:200px" aria-label="Team member">
+      <option value="all" ${PEOPLE.person === 'all' ? 'selected' : ''}>All team members</option>
       ${active.map((s) => `<option value="${esc(s.id)}" ${s.id === PEOPLE.person ? 'selected' : ''}>${esc(s.full_name)}${s.id === S.me.id ? ' (you)' : ''}</option>`).join('')}
     </select>
     ${segButtons('people-period', [['week', 'This week'], ['month', 'This month'], ['all', 'All time']], PEOPLE.period)}`;
   const ticket = ++PEOPLE.ticket;
   const person = PEOPLE.person, t = today();
+  const everyone = person === 'all';
+  // "All": every call; wins credited to someone (booked-without-a-call wins belong to nobody)
+  const byPerson = (q, column) => (everyone ? q.not(column, 'is', null) : q.eq(column, person));
   const weeks = RC.weekStarts(t, 12);
   const since = new Date(Date.parse(`${weeks[0]}T00:00:00Z`) - 86400000).toISOString();   // a day early; trimmed below
   let stats, calls, wins, recent;
   try {
     [stats, calls, wins, recent] = await Promise.all([
       S.sb.rpc('team_stats', { p_from: RC.periodStart(PEOPLE.period, t) }),
-      fetchAll('call_logs', 'id, called_at', (q) => q.eq('staff_id', person).gte('called_at', since).order('id')),
-      fetchAll('lines', 'id, won_at', (q) => q.eq('won_by', person).eq('status', 'won').gte('won_at', weeks[0]).order('id')),
-      S.sb.from('lines').select('id, refresher_type, contact_id, won_at, won_booked_on, won_class_date, students(full_name)')
-        .eq('won_by', person).eq('status', 'won').order('won_at', { ascending: false }).order('id', { ascending: false }).limit(10),
+      fetchAll('call_logs', 'id, called_at', (q) => byPerson(q, 'staff_id').gte('called_at', since).order('id')),
+      fetchAll('lines', 'id, won_at', (q) => byPerson(q, 'won_by').eq('status', 'won').gte('won_at', weeks[0]).order('id')),
+      byPerson(S.sb.from('lines').select('id, refresher_type, contact_id, won_by, won_at, won_booked_on, won_class_date, students(full_name)'), 'won_by')
+        .eq('status', 'won').order('won_at', { ascending: false }).order('id', { ascending: false }).limit(10),
       loadCards(),
     ]);
   } catch (e) {
@@ -1445,7 +1506,8 @@ async function renderPeople() {
   if (stats.error || recent.error) { $('people-tiles').innerHTML = errorBanner(friendlyError(stats.error || recent.error)); return; }
 
   // tiles
-  const k = RC.personTiles(stats.data.find((r) => r.staff_id === person), S.cards, person, t);
+  const k = everyone ? RC.teamTotals(stats.data, S.cards, t)
+    : RC.personTiles(stats.data.find((r) => r.staff_id === person), S.cards, person, t);
   const period = PERIOD_LABEL[PEOPLE.period];
   const tile = (accent, label, value, sub) => `<div class="kpi-card ${accent}"><div class="kpi-label">${label}</div>
     <div class="kpi-value">${esc(value)}</div><div class="kpi-sub">${esc(sub)}</div></div>`;
@@ -1471,11 +1533,16 @@ async function renderPeople() {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: chartLegend }, scales: chartAxes },
   });
 
-  // their cards
-  const held = RC.myCards(S.cards, person, t);
+  // their cards (or everyone's, grouped by who holds them)
+  $('people-cards-title').textContent = everyone ? '🗂️ Cards held by the team' : '🗂️ Their cards';
+  $('people-wins-title').textContent = everyone ? '🟢 Recent team wins' : '🟢 Recent wins';
+  const held = everyone
+    ? S.cards.filter((c) => c.claimed_by && c.open_lines > 0)
+        .sort((a, b) => staffName(a.claimed_by).localeCompare(staffName(b.claimed_by), 'en-AU') || RC._byQueueOrder(a, b))
+    : RC.myCards(S.cards, person, t);
   $('people-cards').innerHTML = held.length ? held.map((c) => `<div class="people-row">
-      <div class="item-info"><div class="item-name">${esc(c.target_name)}${RC.callbackDue(c, person, t) ? ' <span class="badge badge-warning">🟡 Call back due</span>' : ''}</div>
-        <div class="item-sub">${c.org_name ? esc(c.org_name) + ' · ' : ''}${esc(c.open_lines)} open refresher${c.open_lines === 1 ? '' : 's'}</div></div>
+      <div class="item-info"><div class="item-name">${esc(c.target_name)}${RC.callbackDue(c, c.claimed_by, t) ? ' <span class="badge badge-warning">🟡 Call back due</span>' : ''}</div>
+        <div class="item-sub">${c.org_name ? esc(c.org_name) + ' · ' : ''}${esc(c.open_lines)} open refresher${c.open_lines === 1 ? '' : 's'}${everyone ? ` · held by ${esc(staffName(c.claimed_by))}` : ''}</div></div>
       <button class="btn-ghost btn-sm" data-act="open" data-key="${esc(c.card_key)}">Open →</button></div>`).join('')
     : '<div class="muted" style="font-size:0.82rem">No cards held right now.</div>';
 
@@ -1483,7 +1550,7 @@ async function renderPeople() {
   $('people-wins').innerHTML = recent.data.length ? recent.data.map((w) => `<div class="people-row">
       <div class="item-info"><div class="item-name"><a href="${esc(RC.profileUrl(w.contact_id))}" target="_blank" rel="noopener">${esc((w.students && w.students.full_name) || `Contact ${w.contact_id}`)} →</a>
         · ${esc(w.refresher_type)}</div>
-        <div class="item-sub">${w.won_class_date ? `class ${esc(RC.fmtDate(w.won_class_date))} · ` : ''}booked ${esc(RC.fmtDate(w.won_booked_on || w.won_at))}</div></div>
+        <div class="item-sub">${w.won_class_date ? `class ${esc(RC.fmtDate(w.won_class_date))} · ` : ''}booked ${esc(RC.fmtDate(w.won_booked_on || w.won_at))}${everyone ? ` · won by ${esc(staffName(w.won_by))}` : ''}</div></div>
       <span class="badge badge-success">🟢 Won</span></div>`).join('')
     : '<div class="muted" style="font-size:0.82rem">No wins yet.</div>';
 
@@ -1696,6 +1763,8 @@ document.addEventListener('click', (e) => {
     case 'open': openCard(key); break;
     case 'back': showPage(S.prevPage); refresh(); break;
     case 'page': S.queuePage = Math.max(0, +btn.dataset.page); renderQueue(); break;
+    case 'queue-sort': S.queueSort = RC.nextSort(S.queueSort, btn.dataset.sort); S.queuePage = 0; renderQueue(); break;
+    case 'queue-clear': clearQueueFilters(); break;
     case 'signout': signOut(); break;
     case 'signin-restart': restartSignIn(); break;
     default: if (typeof onAction === 'function') onAction(btn.dataset.act, btn, e);
