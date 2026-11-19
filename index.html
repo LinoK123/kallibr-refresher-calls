@@ -444,7 +444,7 @@ a:hover{text-decoration:underline;}
         <option value="individual">Individuals</option>
       </select>
       <input class="search-input" id="m-search" style="max-width:300px" placeholder="🔍  Search organisation or booker…" aria-label="Search your cards">
-      <span class="muted" style="font-size:0.8rem" id="mine-count"></span>
+      <span class="muted" style="font-size:0.8rem" id="mine-total"></span>
       <button class="link-btn hidden" id="mine-clear" data-act="mine-clear">Clear filters</button>
     </div>
     <div id="mine-table"></div>
@@ -518,7 +518,7 @@ a:hover{text-decoration:underline;}
         <select class="form-select" id="sm-role"><option value="staff">Staff</option><option value="manager">Manager</option></select></div>
       <div class="form-group"><div class="form-label">Access</div><label class="check-pill"><input type="checkbox" id="sm-active" checked>Active</label></div>
     </div>
-    <div class="form-hint" style="margin-bottom:12px">They also need an invitation: in Supabase, open Authentication → Users → Add user → Send invitation, with the same email.
+    <div class="form-hint" style="margin-bottom:12px">They also need a Supabase user: Authentication → Users → Add user → Create new user, with the same email and Auto Confirm User ticked. Don't use Send invitation.
       Turning Active off hands their cards back to the queue.</div>
     <div id="sm-msg"></div>
     <div class="modal-foot"><button class="btn-ghost" data-act="staff-cancel">Cancel</button><button class="btn-primary" data-act="staff-save" id="sm-save">Save</button></div>
@@ -1173,7 +1173,7 @@ function renderMine() {
   const usual = RC.heldCards(S.cards, who, today());
   const filtered = RC.filterCards(usual, S.mineFilters);
   const list = S.mineSort.key ? RC.sortCards(filtered, S.mineSort.key, S.mineSort.dir) : filtered;
-  $('mine-count').textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
+  $('mine-total').textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
   $('mine-clear').classList.toggle('hidden', !Object.values(S.mineFilters).some(Boolean));
   document.querySelectorAll('#mine-filters .pill').forEach((p) =>
     p.classList.toggle('active', S.mineFilters[p.dataset.filter] === p.dataset.value));
@@ -1785,7 +1785,7 @@ async function renderAdmin() {
         <div class="table-wrap"><div class="table-scroll"><table class="table">
           <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th></th></tr></thead>
           <tbody>${staffRows}</tbody></table></div></div>
-        <div class="form-hint">New team members also need an invitation from Supabase (Authentication → Users → Add user → Send invitation) before they can sign in.</div>
+        <div class="form-hint">New team members also need a Supabase user before they can sign in: Authentication → Users → Add user → Create new user, with Auto Confirm User ticked (not Send invitation).</div>
       </div>
       <div class="card">
         <div class="card-title">Nightly updates</div><div class="card-subtitle">The last 14 runs of the push from the designated PC</div>
