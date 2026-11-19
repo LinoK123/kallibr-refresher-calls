@@ -1083,7 +1083,7 @@ function cardTable(rows, pager, sort, act = 'queue-sort') {
     return `<th class="sortable ${cls}" data-act="${act}" data-sort="${key}" title="Sort by ${label.toLowerCase()}"
       aria-sort="${on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${label}${on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`;
   }).join('');
-  return `<div class="table-wrap"><div class="table-scroll"><table class="table">
+  return `<div class="table-wrap"><div class="table-scroll"><table class="table num-centre">
     <thead><tr>${head}<th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>${pager || ''}</div>`;
 }
@@ -1790,7 +1790,7 @@ async function renderAdmin() {
       </div>
       <div class="card">
         <div class="card-title">Nightly updates</div><div class="card-subtitle">The last 14 runs of the push from the designated PC</div>
-        ${runRows ? `<div class="table-wrap"><div class="table-scroll"><table class="table">
+        ${runRows ? `<div class="table-wrap"><div class="table-scroll"><table class="table num-centre">
           <thead><tr><th>When</th><th>Result</th><th>Message</th><th class="num">Lines</th><th class="num">Wins</th></tr></thead>
           <tbody>${runRows}</tbody></table></div></div>` : '<div class="muted">No runs yet.</div>'}
       </div>`;
