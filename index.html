@@ -195,6 +195,7 @@ a:hover{text-decoration:underline;}
 .table-scroll{overflow-x:auto;}
 .table{width:100%;border-collapse:collapse;font-size:0.81rem;}
 .table th{background:var(--lav);padding:11px 14px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text);letter-spacing:0.04em;text-transform:uppercase;border-bottom:1.5px solid var(--border);white-space:nowrap;}
+.table.num-centre .num{text-align:center;}   /* numbers and their headers centred together */
 .table th.sortable{cursor:pointer;user-select:none;}
 .table th.sortable:hover{background:var(--lav2);color:#fff;}
 .table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
@@ -1637,7 +1638,7 @@ async function drawTeam() {
   if (ticket !== DASH.teamTicket) return;
   if (error) { $('team-table').innerHTML = errorBanner(friendlyError(error)); return; }
   if (!data.length) { $('team-table').innerHTML = '<div class="muted">No active team members yet.</div>'; return; }
-  $('team-table').innerHTML = `<div class="table-wrap"><div class="table-scroll"><table class="table">
+  $('team-table').innerHTML = `<div class="table-wrap"><div class="table-scroll"><table class="table num-centre">
     <thead><tr><th>Team member</th><th class="num">Cards taken</th><th class="num">Calls logged</th><th class="num">Pending</th>
       <th class="num">Won</th><th class="num">Lost</th><th class="num">Win rate</th></tr></thead>
     <tbody>${data.map((r) => `<tr><td class="cell-name">${esc(r.full_name)}</td><td class="num">${esc(r.cards_taken)}</td>
