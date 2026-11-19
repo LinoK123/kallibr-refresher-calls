@@ -130,7 +130,7 @@ py push/refresher_push.py --manager-report --force --to you@kallibr.com.au   # s
 
 - **Who gets it:** every active team member whose role is **manager** (Admin → Team). Changing someone's role or making them inactive changes the list from the next send.
 - **What it covers:** the previous Monday-to-Sunday week, in Sydney time.
-  - **Inputs:** calls logged, refreshers worked (outcomes recorded in those calls) and cards taken (claimed or assigned).
+  - **Inputs:** calls logged, refreshers worked (outcomes recorded in those calls) and cards taken (claimed or assigned). A card released with no call logged on it doesn't count, so a mis-click Take isn't a card taken. The Dashboard and People pages count the same way.
   - **Outputs:** refreshers won (credited to staff, or booked without a call), lost, and the win rate.
   - **The list now:** refreshers still open, cards in the Queue and held, new refreshers added last week, and call-backs overdue.
   - **One row per active team member:** people with no activity are still listed. "–" means no wins or losses yet.
@@ -198,3 +198,4 @@ The database tests (`supabase/tests`) drop and recreate every tool table, so the
 Migrations are in `supabase/migrations`, applied in order. `0001`–`0005` were applied to the live project on 18 Nov 2026 (clean rebuild, then the first live push). There is no migration-tracking table, so record here each later migration and the date it was applied to live.
 
 - `0006_assigned_auto_release.sql`: assigned cards auto-release after 28 days, not 14. Applied to live on 18 Nov 2026 at the owner's request, without the database tests, since there's no test database. The push run straight afterwards succeeded with 0 released.
+- `0007_cards_taken.sql`: **Cards taken** skips a card released with no call logged; a card counts if it's still theirs or they logged a call on it after taking it. Applied to live on 19 Nov 2026 at the owner's request, without the database tests. Reading `team_stats` as a signed-in staff member straight afterwards gave the expected counts.

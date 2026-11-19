@@ -89,6 +89,7 @@ def seed_stats(cur):
                     "('B:901', %s, 'claimed'), ('B:900', %s, 'released')", (jo, jo, jo))
         for _ in range(3):
             cur.execute("insert into call_logs (card_key, staff_id) values ('B:900', %s)", (jo,))
+        cur.execute("update cards set claimed_by = %s where card_key = 'B:901'", (jo,))   # B:901 still theirs
     set_line(cur, ids[(1, "Heights")], status="pending", outcome="will_book", last_outcome_by=jo, last_outcome_at="now()")
     set_line(cur, ids[(2, "Heights")], status="lost", outcome="not_needed", last_outcome_by=jo, last_outcome_at="now()")
     with as_owner(cur):
@@ -114,9 +115,22 @@ def test_team_stats_counts_assignments_to_them(cur):
     jo, al = seed_stats(cur)
     with as_owner(cur):
         cur.execute("insert into card_events (card_key, staff_id, event) values ('B:901', %s, 'assigned')", (al,))
+        cur.execute("update cards set claimed_by = %s where card_key = 'B:901'", (al,))
     as_user(cur, AL)
     cur.execute("select cards_taken from team_stats() where staff_id = %s", (al,))
     assert cur.fetchone()[0] == 1
+
+
+def test_team_stats_skips_a_card_released_without_a_call(cur):
+    """Owner's request, 19 Nov 2026: a take released with no call logged (a mis-click) is not a card taken."""
+    jo, al = seed_stats(cur)
+    seed_card(cur, "B:902", students=((5, "E"),), lines=((5, "Heights", "2024-06-10"),))
+    with as_owner(cur):
+        cur.execute("insert into card_events (card_key, staff_id, event) values ('B:902', %s, 'claimed'), "
+                    "('B:902', %s, 'released')", (jo, jo))
+    as_user(cur, AL)
+    cur.execute("select cards_taken from team_stats() where staff_id = %s", (jo,))
+    assert cur.fetchone()[0] == 2        # B:900 (called on, then released) and B:901 (still theirs); not B:902
 
 
 def test_team_stats_lists_staff_with_no_activity(cur):

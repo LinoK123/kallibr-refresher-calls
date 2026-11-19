@@ -160,3 +160,23 @@ def test_run_report_uses_the_leave_out_list_and_still_sends_to_every_manager(tmp
     mr.run_report(FakeClient(), MON, tmp_path / "report.txt", sender, leave_out_path=f)
     assert [s[0] for s in sender.sent] == ["mel@kallibr.com.au"]                 # off the table, still emailed
     assert "Mel Manager" not in sender.sent[0][2] and "Mel Manager" not in sender.sent[0][3]
+
+
+def test_a_card_released_without_a_call_is_not_counted_as_taken():
+    """Owner's request, 19 Nov 2026: a take released with no call logged (a mis-click) is not a card taken."""
+    fc = FakeClient()
+    fc.tables["card_events"] += [
+        {"card_key": "B:7", "staff_id": "u2", "event": "claimed", "at": "2026-11-20T01:00:00+00:00"},
+        {"card_key": "B:7", "staff_id": "u2", "event": "released", "at": "2026-11-20T01:01:00+00:00"},   # no call: a mis-click
+        {"card_key": "B:8", "staff_id": "u2", "event": "claimed", "at": "2026-11-17T22:00:00+00:00"},
+        {"card_key": "B:8", "staff_id": "u2", "event": "released", "at": "2026-11-18T05:00:00+00:00"},   # called first: counts
+        {"card_key": "B:6", "staff_id": "u2", "event": "claimed", "at": "2026-11-17T22:00:00+00:00"},
+        {"card_key": "B:6", "staff_id": "u2", "event": "released", "at": "2026-11-18T05:00:00+00:00"},   # only an earlier call
+    ]
+    fc.tables["call_logs"] += [
+        {"id": 6, "staff_id": "u2", "card_key": "B:8", "called_at": "2026-11-18T02:00:00+00:00"},
+        {"id": 7, "staff_id": "u2", "card_key": "B:6", "called_at": "2026-11-17T21:00:00+00:00"},       # before the take
+    ]
+    r = mr.collect(fc, MON)
+    assert {p["name"]: p["cards_taken"] for p in r.people}["Al <Brown> & Co"] == 2      # B:2 (held) and B:8 (called)
+    assert r.team["cards_taken"] == 3                                                   # B:1, B:2, B:8

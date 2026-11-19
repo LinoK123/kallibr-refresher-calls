@@ -30,6 +30,10 @@ def _sydney_date(timestamp) -> date | None:
     return datetime.fromisoformat(str(timestamp).replace("Z", "+00:00")).astimezone(SYDNEY).date()
 
 
+def _instant(timestamp) -> datetime:
+    return datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+
+
 def _date(value) -> date | None:
     return date.fromisoformat(str(value)[:10]) if value else None
 
@@ -55,8 +59,8 @@ def collect(client, today: date, leave_out=frozenset()) -> Report:
     staff = [s for s in client.select("staff", "id,email,full_name,role,active") if s.get("active")]
 
     # inputs: calls, refreshers worked (outcomes in those calls), cards taken
-    calls = {c["id"]: c["staff_id"] for c in client.select("call_logs", "id,staff_id,called_at", called_at=f"gte.{since}")
-             if in_week(_sydney_date(c["called_at"]))}
+    recent_calls = client.select("call_logs", "id,staff_id,card_key,called_at", called_at=f"gte.{since}")
+    calls = {c["id"]: c["staff_id"] for c in recent_calls if in_week(_sydney_date(c["called_at"]))}
     calls_by = defaultdict(int)
     for who in calls.values():
         calls_by[who] += 1
@@ -75,11 +79,23 @@ def collect(client, today: date, leave_out=frozenset()) -> Report:
             worked_by[who] += 1
             if o["outcome"] in LOST_OUTCOMES:
                 lost_by[who] += 1
-    taken_by, taken_all = defaultdict(set), set()
+    # a card taken counts if the person still holds it or logged a call on it after taking it, so a take
+    # released with no call (a mis-click) does not count (owner's request, 19 Nov 2026)
+    card_rows = client.select("cards", "card_key,claimed_by,claimed_at,callback_on,do_not_call", order="card_key")
+    holder = {c["card_key"]: c.get("claimed_by") for c in card_rows}
+    called_at = defaultdict(list)
+    for c in recent_calls:
+        called_at[(c["staff_id"], c.get("card_key"))].append(_instant(c["called_at"]))
+    first_take = {}
     for e in client.select("card_events", "id,card_key,staff_id,event,at", at=f"gte.{since}"):
         if e["event"] in ("claimed", "assigned") and e.get("staff_id") and in_week(_sydney_date(e["at"])):
-            taken_by[e["staff_id"]].add(e["card_key"])
-            taken_all.add(e["card_key"])
+            key, at = (e["staff_id"], e["card_key"]), _instant(e["at"])
+            first_take[key] = min(first_take.get(key, at), at)
+    taken_by, taken_all = defaultdict(set), set()
+    for (who, card), at in first_take.items():
+        if holder.get(card) == who or any(t >= at for t in called_at[(who, card)]):
+            taken_by[who].add(card)
+            taken_all.add(card)
 
     # outputs and the list now
     lines = client.select("lines", "id,contact_id,status,in_window,won_by,won_at,won_without_call,first_listed_on")
@@ -103,7 +119,7 @@ def collect(client, today: date, leave_out=frozenset()) -> Report:
 
     queue_cards = held_cards = 0
     overdue_by = defaultdict(int)
-    for c in client.select("cards", "card_key,claimed_by,claimed_at,callback_on,do_not_call", order="card_key"):
+    for c in card_rows:
         if c["card_key"] not in open_cards:
             continue
         if not c.get("claimed_by"):
