@@ -12,8 +12,8 @@ Every Monday at 9 am, every active manager gets one email showing the previous w
 **Week.** The previous Monday to Sunday, Sydney time, counted from the day the report runs. A report run on a Tuesday, after the PC was off on Monday, still covers the week before.
 
 **Inputs, per person and for the team:**
-- **Calls logged:** `call_logs` rows whose Sydney date falls in the week.
-- **Refreshers worked:** `line_outcomes` rows belonging to those calls.
+- **Calls logged:** `call_logs` rows whose Sydney date falls in the week. Since 20 Nov 2026, updates saved with no call (`no_call`) aren't counted here.
+- **Refreshers worked:** `line_outcomes` rows belonging to the week's calls and no-call updates.
 - **Cards taken:** distinct cards with a `claimed` event by them, or an `assigned` event to them, in the week. Since 19 Nov 2026 a card counts only if it's still theirs or they logged a call on it after taking it.
 
 **Outputs:**

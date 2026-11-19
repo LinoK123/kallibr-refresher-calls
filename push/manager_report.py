@@ -59,11 +59,15 @@ def collect(client, today: date, leave_out=frozenset()) -> Report:
     staff = [s for s in client.select("staff", "id,email,full_name,role,active") if s.get("active")]
 
     # inputs: calls, refreshers worked (outcomes in those calls), cards taken
-    recent_calls = client.select("call_logs", "id,staff_id,card_key,called_at", called_at=f"gte.{since}")
-    calls = {c["id"]: c["staff_id"] for c in recent_calls if in_week(_sydney_date(c["called_at"]))}
+    # every log in the week, calls and updates saved with no call; only calls count as "calls logged"
+    # (owner's request, 20 Nov 2026), but an update's outcomes still count as worked and lost
+    recent_calls = client.select("call_logs", "id,staff_id,card_key,called_at,no_call", called_at=f"gte.{since}")
+    week_logs = [c for c in recent_calls if in_week(_sydney_date(c["called_at"]))]
+    calls = {c["id"]: c["staff_id"] for c in week_logs}
     calls_by = defaultdict(int)
-    for who in calls.values():
-        calls_by[who] += 1
+    for c in week_logs:
+        if not c.get("no_call"):
+            calls_by[c["staff_id"]] += 1
     worked_by, lost_by = defaultdict(int), defaultdict(int)
     if calls:
         outcomes = []
@@ -132,7 +136,7 @@ def collect(client, today: date, leave_out=frozenset()) -> Report:
             overdue_by[c["claimed_by"]] += 1
 
     lost_all = sum(lost_by.values())
-    team = dict(calls=len(calls), worked=sum(worked_by.values()), cards_taken=len(taken_all),
+    team = dict(calls=sum(calls_by.values()), worked=sum(worked_by.values()), cards_taken=len(taken_all),
                 won=won_all, won_credited=won_credited, won_without_call=won_all - won_credited, lost=lost_all,
                 win_rate=_rate(won_all, lost_all), open=open_lines, not_called=not_called, queue_cards=queue_cards,
                 held_cards=held_cards, new_listed=new_listed, callbacks_overdue=sum(overdue_by.values()))

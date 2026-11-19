@@ -170,10 +170,11 @@ def claim(cur, email, card_key="B:900"):
     assert cur.fetchone()[0] is True
 
 
-def save(cur, email, outcomes, notes=None, callback_on=None, dnc_card=False, card_key="B:900"):
+def save(cur, email, outcomes, notes=None, callback_on=None, dnc_card=False, card_key="B:900", no_call=False):
     as_user(cur, email)
     payload = json.dumps([{"line_id": lid, "outcome": o} for lid, o in outcomes])
-    cur.execute("select save_call_log(%s, %s, %s, %s::jsonb, %s)", (card_key, notes, callback_on, payload, dnc_card))
+    cur.execute("select save_call_log(%s, %s, %s, %s::jsonb, %s, %s)",
+                (card_key, notes, callback_on, payload, dnc_card, no_call))
     return cur.fetchone()[0]
 
 

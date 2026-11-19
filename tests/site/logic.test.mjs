@@ -140,6 +140,13 @@ test('buildOutcomes drops blanks', () => {
   assert.deepEqual(plain(RC.buildOutcomes({ 3: null, 4: 'no_answer', 5: undefined })), [{ line_id: 4, outcome: 'no_answer' }]);
 });
 
+test('logWording: a phone call or an update with no call', () => {   // owner's request, 20 Nov 2026
+  assert.deepEqual(plain(RC.logWording(false)), { title: '📝 Log this call', save: 'Save Call Log', toast: 'Call log saved ✓',
+    placeholder: 'Who you spoke to and what they said…' });
+  assert.deepEqual(plain(RC.logWording(true)), { title: '✉️ Log an update (no call)', save: 'Save Update', toast: 'Update saved ✓',
+    placeholder: 'How they got in touch and what they said…' });
+});
+
 test('validateCallLog', () => {
   assert.equal(RC.validateCallLog([], null, T), 'Choose an outcome for at least one refresher.');
   assert.equal(RC.validateCallLog([{ line_id: 1, outcome: 'call_back' }], null, T), 'Pick a call-back date.');

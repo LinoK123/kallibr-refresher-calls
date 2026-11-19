@@ -776,6 +776,14 @@ const RC = (() => {
     return null;
   }
 
+  // The log form's words for a phone call, or for an update saved with no call, such as an email reply
+  // (owner's request, 20 Nov 2026).
+  const logWording = (noCall) => (noCall
+    ? { title: '✉️ Log an update (no call)', save: 'Save Update', toast: 'Update saved ✓',
+        placeholder: 'How they got in touch and what they said…' }
+    : { title: '📝 Log this call', save: 'Save Call Log', toast: 'Call log saved ✓',
+        placeholder: 'Who you spoke to and what they said…' });
+
   // ---- dashboard ----
   // A refresher booked without a call is simply Won on the chart (the owner's call, 18 Nov 2026).
   const SEGMENTS = [
@@ -945,7 +953,7 @@ const RC = (() => {
   return { PROFILE_URL, profileUrl, esc, sydneyToday, cleanCode, authLinkError, signInError, fmtMonth, fmtDate, fmtDateTime, dueLabel, sortQueue, filterCards,
            queueCards, assignedCards, myCards, heldCards, callbackDue, skippedNotice, staleBanner, OUTCOMES, STATUS_BADGE, outcomeLabel, isOpen, groupLines,
            filterGroups, sortGroups, cardSummary, emailTable,
-           buildOutcomes, validateCallLog, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
+           buildOutcomes, validateCallLog, logWording, SEGMENTS, cohortChart, kpis, periodStart, fmtRate,
            weekStarts, weeklySeries, personTiles, teamComparison, teamTotals, sortCards, nextSort, callbackList, fmtWeekday, pageOf,
            _sydneyParts: sydneyParts, _byQueueOrder: byQueueOrder };
 })();
@@ -1248,7 +1256,7 @@ async function renderCard(key) {
     const [lines, history, logs] = await Promise.all([
       fetchIn('lines', '*', ids, 'id'),
       fetchIn('course_history', 'contact_id, course_name, completed_on', ids, 'completed_on'),
-      fetchAll('call_logs', 'id, staff_id, called_at, notes, callback_on, line_outcomes(line_id, outcome)',
+      fetchAll('call_logs', 'id, staff_id, called_at, notes, callback_on, no_call, line_outcomes(line_id, outcome)',
         (q) => q.eq('card_key', key).order('called_at', { ascending: false })),
     ]);
     if (S.cardKey !== key) return;                        // the user moved on while this loaded
@@ -1289,8 +1297,12 @@ function drawCard() {
   let form;
   if (canLog) {
     const opts = RC.OUTCOMES.map((o) => `<option value="${esc(o.code)}">${esc(o.label)}</option>`).join('');
+    const words = RC.logWording(S.cardView.noCall);
     form = `<div class="card">
-      <div class="section-title">📝 Log this call</div>
+      <div class="section-title" id="log-title">${esc(words.title)}</div>
+      <div class="form-group"><div class="form-label">How</div>
+        ${segButtons('log-kind', [['call', '📞 Phone call'], ['no_call', '✉️ No call (email or other)']], S.cardView.noCall ? 'no_call' : 'call')}
+        <div class="form-hint">Choose No call when they got back to you another way, such as by email. It sets the outcomes the same way but doesn't count as a call.</div></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label" for="apply-all">Apply one outcome to all shown</label>
           <select class="form-select" id="apply-all"><option value="">Choose…</option>${opts}</select>
@@ -1299,9 +1311,9 @@ function drawCard() {
           <input class="form-input" type="date" id="cb-date" min="${esc(t)}"></div>
       </div>
       <div class="form-group"><label class="form-label" for="call-notes">Notes</label>
-        <textarea class="form-textarea" id="call-notes" placeholder="Who you spoke to and what they said…"></textarea></div>
+        <textarea class="form-textarea" id="call-notes" placeholder="${esc(words.placeholder)}"></textarea></div>
       <div id="save-msg"></div>
-      <div class="tools-row"><button class="btn-primary" data-act="save-call" id="save-call">Save Call Log</button>
+      <div class="tools-row"><button class="btn-primary" data-act="save-call" id="save-call">${esc(words.save)}</button>
         <span class="muted" style="font-size:0.78rem" id="sel-count"></span></div>
     </div>`;
   } else if (card.claimed_by) {
@@ -1325,7 +1337,7 @@ function drawCard() {
     </div></div>` : '';
 
   const historyHtml = logs.length ? logs.map((log) => `<div class="log-item">
-      <div class="log-top"><span class="log-title">${esc(staffName(log.staff_id))}</span><span class="log-date">${esc(RC.fmtDateTime(log.called_at))}</span></div>
+      <div class="log-top"><span class="log-title">${esc(staffName(log.staff_id))}${log.no_call ? ' <span class="badge badge-neutral">✉️ No call</span>' : ''}</span><span class="log-date">${esc(RC.fmtDateTime(log.called_at))}</span></div>
       ${log.notes ? `<div class="log-notes">${esc(log.notes)}</div>` : ''}
       <div class="log-outcomes">${(log.line_outcomes || []).map((o) => {
         const l = lineById.get(o.line_id);
@@ -1333,7 +1345,7 @@ function drawCard() {
         const status = (RC.OUTCOMES.find((x) => x.code === o.outcome) || {}).status;
         return `<span class="badge ${status === 'lost' ? 'badge-danger' : 'badge-warning'}">${esc(who)}: ${esc(RC.outcomeLabel(o.outcome))}</span>`;
       }).join('')}${log.callback_on ? `<span class="badge badge-info">Call back ${esc(RC.fmtDate(log.callback_on))}</span>` : ''}</div>
-    </div>`).join('') : '<div class="muted" style="font-size:0.82rem">No calls logged yet.</div>';
+    </div>`).join('') : '<div class="muted" style="font-size:0.82rem">No calls or updates logged yet.</div>';
 
   $('card-body').innerHTML = `
     <div class="hero">
@@ -1501,9 +1513,10 @@ async function saveCall(dncCard) {
   }
   showSaveMsg('', '');
   $('save-call').disabled = true;
+  const noCall = !!S.cardView.noCall;
   const { data, error } = await S.sb.rpc('save_call_log', {
     p_card_key: key, p_notes: $('call-notes').value.trim() || null, p_callback_on: callbackOn,
-    p_outcomes: outcomes, p_dnc_card: !!dncCard,
+    p_outcomes: outcomes, p_dnc_card: !!dncCard, p_no_call: noCall,
   });
   if (error) {
     $('save-call').disabled = false;
@@ -1513,7 +1526,8 @@ async function saveCall(dncCard) {
   const skipped = (data && data.skipped_line_ids) || [];
   const notice = RC.skippedNotice(skipped, S.cardData.lines, S.cardData.students);
   S.cardView.sel = {};
-  toast('Call log saved ✓');
+  S.cardView.noCall = false;                                 // the next entry starts as a call again
+  toast(RC.logWording(noCall).toast);
   await renderCard(key);
   S.cardNotice = notice;
   if (S.cardNotice) drawCard();
@@ -1529,6 +1543,16 @@ async function cardRpc(fn, params, done) {
 function onAction(act, btn) {
   switch (act) {
     case 'save-call': saveCall(); break;
+    case 'log-kind': {
+      // switch the words in place, so outcomes and notes already entered stay
+      S.cardView.noCall = btn.dataset.value === 'no_call';
+      const words = RC.logWording(S.cardView.noCall);
+      btn.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+      $('log-title').textContent = words.title;
+      $('save-call').textContent = words.save;
+      $('call-notes').placeholder = words.placeholder;
+      break;
+    }
     case 'dnc-yes': $('dnc-modal').classList.remove('open'); saveCall(true); break;
     case 'dnc-no': $('dnc-modal').classList.remove('open'); saveCall(false); break;
     case 'dnc-cancel': $('dnc-modal').classList.remove('open'); break;
@@ -1677,7 +1701,7 @@ async function renderPeople() {
   try {
     [stats, calls, wins, recent] = await Promise.all([
       S.sb.rpc('team_stats', { p_from: RC.periodStart(PEOPLE.period, t) }),
-      fetchAll('call_logs', 'id, called_at', (q) => byPerson(q, 'staff_id').gte('called_at', since).order('id')),
+      fetchAll('call_logs', 'id, called_at', (q) => byPerson(q, 'staff_id').eq('no_call', false).gte('called_at', since).order('id')),
       fetchAll('lines', 'id, won_at', (q) => byPerson(q, 'won_by').eq('status', 'won').gte('won_at', weeks[0]).order('id')),
       byPerson(S.sb.from('lines').select('id, refresher_type, contact_id, won_by, won_at, won_booked_on, won_class_date, students(full_name)'), 'won_by')
         .eq('status', 'won').order('won_at', { ascending: false }).order('id', { ascending: false }).limit(10),

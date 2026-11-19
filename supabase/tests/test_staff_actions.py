@@ -72,6 +72,24 @@ def test_save_sets_each_line_separately(cur, L):
     assert line(cur, L.h2)[:2] == ("not_called", None)
     assert line(cur, L.h)[2] == L.jo
     assert call_log(cur, out["call_log_id"]).staff_id == L.jo
+    assert call_log(cur, out["call_log_id"]).no_call is False
+
+
+def test_an_update_with_no_call_sets_outcomes_and_is_marked(cur, L):
+    """Owner's request, 20 Nov 2026: record an outcome from an email reply without logging a call."""
+    claim(cur, JO)
+    out = save(cur, JO, [(L.h, "not_needed")], notes="Emailed back: no longer needed", no_call=True)
+    assert line(cur, L.h)[:3] == ("lost", "not_needed", L.jo)
+    log = call_log(cur, out["call_log_id"])
+    assert (log.no_call, log.notes) == (True, "Emailed back: no longer needed")
+
+
+def test_the_old_page_still_logs_a_call(cur, L):
+    """The page before 0009 sends five arguments; that must still save, as a call."""
+    claim(cur, JO)
+    cur.execute("select save_call_log(p_card_key => 'B:900', p_notes => null, p_callback_on => null, "
+                "p_outcomes => %s::jsonb, p_dnc_card => false)", (f'[{{"line_id": {L.h}, "outcome": "no_answer"}}]',))
+    assert call_log(cur, cur.fetchone()[0]["call_log_id"]).no_call is False
 
 
 def test_save_requires_claim(cur, L):

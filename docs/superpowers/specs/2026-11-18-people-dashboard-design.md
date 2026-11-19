@@ -38,7 +38,7 @@ A second dashboard, alongside the existing one, focused on people: managers see 
 
 - **Period figures come from the existing `team_stats(p_from)` function**, so they match the Team table exactly: calls logged, won, pending, lost, win rate. The team comparison uses the same rows.
 - **"Cards held" and "call-backs due" are current state, not period figures.** They use the same rules as My cards (`RC.callbackDue`).
-- **Weekly chart:** the 12 weeks run Monday to Sunday, Sydney time, ending with the current week. Calls are dated by `call_logs.called_at` on the Sydney calendar, and wins by `lines.won_at`, both for that person.
+- **Weekly chart:** the 12 weeks run Monday to Sunday, Sydney time, ending with the current week. Calls are dated by `call_logs.called_at` on the Sydney calendar, and wins by `lines.won_at`, both for that person. Updates saved with no call (`no_call`) aren't counted as calls (since 20 Nov 2026).
 - **Recent wins:** the person's last 10 won refreshers. Each shows the student, refresher type, class date and the date booked, linking to the student's aXcelerate profile.
 - **Look:** the Kallibr Design Kit patterns already used on the Dashboard (KPI cards, cards, Chart.js 4.4.1 settings).
 

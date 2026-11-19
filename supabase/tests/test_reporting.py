@@ -133,6 +133,20 @@ def test_team_stats_skips_a_card_released_without_a_call(cur):
     assert cur.fetchone()[0] == 2        # B:900 (called on, then released) and B:901 (still theirs); not B:902
 
 
+def test_team_stats_does_not_count_an_update_with_no_call_as_a_call(cur):
+    """Owner's request, 20 Nov 2026: an update with no call isn't a call, but it is work on the card."""
+    jo, al = seed_stats(cur)
+    seed_card(cur, "B:902", students=((5, "E"),), lines=((5, "Heights", "2024-06-10"),))
+    with as_owner(cur):
+        cur.execute("insert into card_events (card_key, staff_id, event, at) values "
+                    "('B:902', %s, 'claimed', now() - interval '1 minute')", (jo,))
+        cur.execute("insert into call_logs (card_key, staff_id, no_call) values ('B:902', %s, true)", (jo,))
+        cur.execute("insert into card_events (card_key, staff_id, event) values ('B:902', %s, 'released')", (jo,))
+    as_user(cur, AL)
+    cur.execute("select cards_taken, calls_logged from team_stats() where staff_id = %s", (jo,))
+    assert cur.fetchone() == (3, 3)          # B:902 counts as taken; still 3 calls
+
+
 def test_team_stats_lists_staff_with_no_activity(cur):
     jo, al = seed_stats(cur)
     as_user(cur, JO)

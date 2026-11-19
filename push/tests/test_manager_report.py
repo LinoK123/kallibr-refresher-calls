@@ -187,3 +187,17 @@ def test_done_in_house_counts_as_lost():
     fc.tables["line_outcomes"].append({"call_log_id": 5, "outcome": "done_in_house"})
     r = mr.collect(fc, MON)
     assert {p["name"]: p["lost"] for p in r.people}["Al <Brown> & Co"] == 2 and r.team["lost"] == 4
+
+
+def test_an_update_with_no_call_counts_its_outcomes_but_not_as_a_call():
+    """Owner's request, 20 Nov 2026: an outcome recorded from an email reply is not a call."""
+    fc = FakeClient()
+    fc.tables["card_events"].append(
+        {"card_key": "B:3", "staff_id": "u3", "event": "claimed", "at": "2026-11-18T22:00:00+00:00"})
+    fc.tables["call_logs"].append(
+        {"id": 8, "staff_id": "u3", "card_key": "B:3", "no_call": True, "called_at": "2026-11-19T01:00:00+00:00"})
+    fc.tables["line_outcomes"].append({"call_log_id": 8, "outcome": "not_needed"})
+    r = mr.collect(fc, MON)
+    quiet = {p["name"]: p for p in r.people}["Quiet Person"]
+    assert (quiet["calls"], quiet["worked"], quiet["lost"], quiet["cards_taken"]) == (0, 1, 1, 1)
+    assert (r.team["calls"], r.team["worked"], r.team["lost"]) == (3, 7, 4)

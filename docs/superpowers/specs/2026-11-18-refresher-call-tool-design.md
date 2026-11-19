@@ -178,7 +178,8 @@ Every night, for each line that is not already won, the push looks for a real bo
 - Students are sorted by due date, overdue first. A student with two lines gets two rows and a "Due for both" badge.
 - Each student row expands to show their other Kallibr courses (course name and date only).
 - **Save Call Log** records one call: who, when, notes, optional call-back date, and the outcome chosen for each line. "Apply one outcome to all" fills every open line, and staff can then change individual rows before saving.
-- History lists every call on the card, newest first.
+- **Updates with no call** (added 20 Nov 2026, owner's request): a **How** choice above the form, 📞 Phone call (the default) or ✉️ No call (email or other), for when someone replies another way. It saves the same way (outcomes, notes, call-back date) with `call_logs.no_call = true` and the button reads **Save Update**. It isn't counted as a call logged anywhere (Team table, People, Monday report). It still counts as work on the card: it keeps a take in Cards taken, and a later booking is credited to whoever saved it. The form goes back to Phone call after each save.
+- History lists every call and update on the card, newest first; updates are tagged "✉️ No call".
 
 ### 5.8 Dashboard
 
