@@ -14,11 +14,11 @@ Every Monday at 9 am, every active manager gets one email showing the previous w
 **Inputs, per person and for the team:**
 - **Calls logged:** `call_logs` rows whose Sydney date falls in the week.
 - **Refreshers worked:** `line_outcomes` rows belonging to those calls.
-- **Cards taken:** distinct cards with a `claimed` event by them, or an `assigned` event to them, in the week.
+- **Cards taken:** distinct cards with a `claimed` event by them, or an `assigned` event to them, in the week. Since 19 Nov 2026 a card counts only if it's still theirs or they logged a call on it after taking it.
 
 **Outputs:**
 - **Won:** lines with `status = 'won'` and `won_at` in the week. A person's wins are those with `won_by` = them. The team total also counts "booked without a call" and shows the split.
-- **Lost:** lost-type outcomes (not needed, went elsewhere, left the company, do not call) logged in the week's calls.
+- **Lost:** lost-type outcomes (not needed, went elsewhere, done in-house, left the company, do not call) logged in the week's calls.
 - **Win rate:** won ÷ (won + lost), or "–" when both are 0.
 
 **The list now** (team only, as at the moment the report runs):

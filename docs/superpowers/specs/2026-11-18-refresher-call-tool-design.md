@@ -129,7 +129,7 @@ Each line has one status:
 | Not called | No outcome logged |
 | Pending | Called; latest outcome is one of: No answer / left message, Call back (with a date), Info or quote sent, Will book |
 | Won | A booking was found by the nightly push |
-| Lost | Latest outcome is one of: Not needed, Went elsewhere, Left the company, Do not call |
+| Lost | Latest outcome is one of: Not needed, Went elsewhere, Done in-house (added 20 Nov 2026: their company ran the refresher itself), Left the company, Do not call |
 
 - Staff can never pick Won.
 - "Do not call" on any line asks whether it applies to the whole card. If yes, every open line on the card is lost and the card key (the booker's contact ID, the individual's contact ID, or the organisation name) is flagged.

@@ -152,8 +152,10 @@ test('validateCallLog', () => {
 test('every outcome maps to pending or lost, never won', () => {
   assert.ok(RC.OUTCOMES.every((o) => ['pending', 'lost'].includes(o.status)));
   assert.deepEqual(plain(RC.OUTCOMES.map((o) => o.code)),
-    ['no_answer', 'call_back', 'info_sent', 'will_book', 'not_needed', 'went_elsewhere', 'left_company', 'do_not_call']);
+    ['no_answer', 'call_back', 'info_sent', 'will_book', 'not_needed', 'went_elsewhere', 'done_in_house', 'left_company', 'do_not_call']);
   assert.equal(RC.outcomeLabel('left_company'), 'Left the company');
+  assert.equal(RC.outcomeLabel('done_in_house'), 'Done in-house');                  // their company ran it themselves
+  assert.equal(RC.OUTCOMES.find((o) => o.code === 'done_in_house').status, 'lost');
   assert.deepEqual(plain(RC.STATUS_BADGE.won), ['badge-success', '🟢 Won']);
 });
 

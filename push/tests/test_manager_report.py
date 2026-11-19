@@ -180,3 +180,10 @@ def test_a_card_released_without_a_call_is_not_counted_as_taken():
     r = mr.collect(fc, MON)
     assert {p["name"]: p["cards_taken"] for p in r.people}["Al <Brown> & Co"] == 2      # B:2 (held) and B:8 (called)
     assert r.team["cards_taken"] == 3                                                   # B:1, B:2, B:8
+
+
+def test_done_in_house_counts_as_lost():
+    fc = FakeClient()
+    fc.tables["line_outcomes"].append({"call_log_id": 5, "outcome": "done_in_house"})
+    r = mr.collect(fc, MON)
+    assert {p["name"]: p["lost"] for p in r.people}["Al <Brown> & Co"] == 2 and r.team["lost"] == 4

@@ -667,6 +667,7 @@ const RC = (() => {
     { code: 'will_book', label: 'Will book', status: 'pending' },
     { code: 'not_needed', label: 'Not needed', status: 'lost' },
     { code: 'went_elsewhere', label: 'Went elsewhere', status: 'lost' },
+    { code: 'done_in_house', label: 'Done in-house', status: 'lost' },
     { code: 'left_company', label: 'Left the company', status: 'lost' },
     { code: 'do_not_call', label: 'Do not call', status: 'lost' },
   ];
@@ -1599,7 +1600,7 @@ async function drawKpis() {
     kpi('accent-neutral', 'Not called', k.not_called, 'No outcome logged yet') +
     kpi('accent-warning', '🟡 Pending', k.pending, 'Called, not settled') +
     kpi('accent-success', '🟢 Won', k.won, 'Booked') +
-    kpi('accent-danger', '🔴 Lost', k.lost, 'Not needed, elsewhere, left or do not call');
+    kpi('accent-danger', '🔴 Lost', k.lost, 'Not needed, elsewhere, in-house, left or do not call');
 }
 async function drawCohort() {
   $('cohort-filters').innerHTML =

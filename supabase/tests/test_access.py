@@ -47,6 +47,8 @@ def test_staff_cannot_write_tables_directly(cur, sql):
 
 
 def test_outcome_status(cur):
+    cur.execute("select outcome_status('done_in_house')")
+    assert cur.fetchone()[0] == "lost"
     cur.execute("select outcome_status('will_book'), outcome_status('left_company')")
     assert cur.fetchone() == ("pending", "lost")
     with pytest.raises(psycopg.Error):

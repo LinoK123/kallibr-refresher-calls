@@ -15,7 +15,7 @@ import config
 from callback_digest import fmt_day, week_start
 
 SYDNEY = ZoneInfo("Australia/Sydney")
-LOST_OUTCOMES = {"not_needed", "went_elsewhere", "left_company", "do_not_call"}
+LOST_OUTCOMES = {"not_needed", "went_elsewhere", "done_in_house", "left_company", "do_not_call"}
 
 
 def prior_week(today: date) -> tuple[date, date]:
