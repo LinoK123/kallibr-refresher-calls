@@ -113,7 +113,7 @@ def run(con: sqlite3.Connection, client, today: date, now: datetime, dry_run: bo
                                    f"{config.MAX_SOURCE_AGE_HOURS} hours old.", synced, now, dry_run)
 
     # 2. Lines and cards.
-    lines = build_lines(con, today)
+    lines = build_lines(con, today, ignore_ids=config.IGNORE_BOOKER_CONTACT_IDS)
     placed = place_students(con, lines, ignore_ids=config.IGNORE_BOOKER_CONTACT_IDS, today=today)
 
     # 3. Safety stop: the list shrank too much.

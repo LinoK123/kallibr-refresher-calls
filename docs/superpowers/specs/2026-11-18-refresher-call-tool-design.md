@@ -87,6 +87,7 @@ A **line** is one student due for one refresher type. Identity: (contact ID, ref
   - due date is on or before today + 4 months
   - the student has no future booking in the same type (class start today or later; status Approved, Booked, Moved, Replaced, Tentative or Waitlisted)
   - the student has no real booking in the same type on a class starting after the last-done date. Someone who has already been booked again is not rung, and does not show up as an instant "won" on the first night
+  - the student is not Kallibr staff: their most recent done event of any type was not under an organisation starting "Kallibr" or "GL Training", and their contact ID is not on the config's staff list *(added 23 Nov 2026; see `2026-11-23-staff-not-students-design.md`)*
 
 On 18 November 2026 this gives 4,053 lines for 3,624 people: 1,489 confined space (1,165 overdue), 2,183 heights (1,802 overdue), 381 HSR (329 overdue). 428 people have more than one line. These figures, and the card counts in 5.3, were produced by applying the rules in this document to the database synced that morning; use them as a rough check, not an exact test target, because the data changes daily.
 

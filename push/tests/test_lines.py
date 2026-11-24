@@ -61,3 +61,47 @@ def test_hsr_ignores_cancelled_and_future_classes(con):
     book(con, 2, 100882, "2025-08-04", counted=0)
     book(con, 3, 100882, "2026-11-18")           # starts today: has not "already started"
     assert build_lines(con, TODAY) == []
+
+
+# Kallibr staff are not students (design 2026-11-23-staff-not-students)
+
+def test_staff_org_student_left_out(con):
+    comp(con, 1, 100889, "2024-06-10", org="Kallibr Training")
+    comp(con, 2, 100889, "2024-06-10", org="GL Training")
+    comp(con, 3, 100889, "2024-06-10", org="Acme Pty Ltd")
+    assert [l.contact_id for l in build_lines(con, TODAY)] == [3]
+
+
+def test_staff_org_case_and_spaces(con):
+    comp(con, 1, 100889, "2024-06-10", org="  kallibr training ")
+    assert build_lines(con, TODAY) == []
+
+
+def test_kallibr_mid_name_is_a_customer(con):
+    comp(con, 1, 100889, "2024-06-10", org="Acme c/o Kallibr")
+    assert [l.contact_id for l in build_lines(con, TODAY)] == [1]
+
+
+def test_ex_staff_back_on_list_under_new_company(con):
+    comp(con, 1, 100889, "2023-06-01", org="Kallibr Training")    # older staff course, out of the 3-year window
+    comp(con, 1, 100890, "2024-06-10", org="Acme Pty Ltd")
+    [l] = build_lines(con, TODAY)
+    assert (l.refresher_type, l.org_name) == ("Confined Space", "Acme Pty Ltd")
+
+
+def test_newer_staff_course_not_yet_due_drops_student(con):
+    comp(con, 1, 100890, "2024-06-10", org="Acme Pty Ltd")        # due June 2026
+    comp(con, 1, 100889, "2026-01-15", org="Kallibr Training")    # due 2028: not on the list itself
+    assert build_lines(con, TODAY) == []
+
+
+def test_same_day_staff_event_counts(con):
+    comp(con, 1, 100890, "2024-06-10", org="Acme Pty Ltd")
+    comp(con, 1, 100889, "2024-06-10", org="Kallibr Training")
+    assert build_lines(con, TODAY) == []
+
+
+def test_ignore_ids_left_out(con):
+    comp(con, 1, 100889, "2024-06-10")
+    comp(con, 2, 100889, "2024-06-10")
+    assert [l.contact_id for l in build_lines(con, TODAY, ignore_ids=(1,))] == [2]

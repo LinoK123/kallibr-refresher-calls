@@ -82,8 +82,17 @@ def _by_contact_type(bookings, types):
     return by
 
 
-def build_lines(con: sqlite3.Connection, today: date) -> list[Line]:
-    """Every student due a refresher (spec 5.2), one Line per student and type."""
+def _staff_org(org) -> bool:
+    """An organisation that is Kallibr itself: starts with a STAFF_ORG_PREFIXES entry (trimmed, any case)."""
+    org = (org or "").strip().lower()
+    return any(org.startswith(p.lower()) for p in config.STAFF_ORG_PREFIXES)
+
+
+def build_lines(con: sqlite3.Connection, today: date, ignore_ids: tuple[int, ...] = ()) -> list[Line]:
+    """Every student due a refresher (spec 5.2), one Line per student and type.
+
+    Kallibr staff are not students (23 Nov 2026): a contact in `ignore_ids`, or whose most recent done event
+    of any refresher type was under a staff organisation, gets no lines."""
     types = type_map(con)
     hsr = set(config.HSR_COURSE_TYPE_IDS)
     # (contact, type) -> [(date, is_completion, course_type_id, course_name, location, student, org)]
@@ -102,10 +111,22 @@ def build_lines(con: sqlite3.Connection, today: date) -> list[Line]:
                                                   b.student, b.organisation))
     by_type = _by_contact_type(bookings, types)
 
+    # Staff: judged on each contact's most recent event across all types, before any window or due check.
+    latest_on, staff = {}, set(ignore_ids)
+    for (cid, _), evs in events.items():
+        for e in evs:
+            if cid not in latest_on or e[0] > latest_on[cid][0]:
+                latest_on[cid] = (e[0], _staff_org(e[6]))
+            elif e[0] == latest_on[cid][0] and _staff_org(e[6]):
+                latest_on[cid] = (e[0], True)
+    staff |= {cid for cid, (_, is_staff) in latest_on.items() if is_staff}
+
     earliest = add_months(today, -12 * config.LOOKBACK_YEARS)
     horizon = add_months(today, config.LOOKAHEAD_MONTHS)
     lines = []
     for (cid, t), evs in events.items():
+        if cid in staff:
+            continue
         last = max(e[0] for e in evs)
         # a completion on the last-done date wins over a booking-only event on the same date
         ev = sorted((e for e in evs if e[0] == last), key=lambda e: (not e[1], e[2], e[3] or ""))[0]
@@ -154,9 +175,7 @@ def _staff_names(con) -> set[str]:
 def _is_kallibr(who: int, name, org, staff: set[str], ignore: set[int]) -> bool:
     """A contact who works for Kallibr: their organisation starts with a STAFF_ORG_PREFIXES entry,
     their name is a staff name, or they're on the ignore list."""
-    org = (org or "").strip().lower()
-    return (who in ignore or (_norm(name) and _norm(name) in staff)
-            or any(org.startswith(p.lower()) for p in config.STAFF_ORG_PREFIXES))
+    return who in ignore or bool(_norm(name) and _norm(name) in staff) or _staff_org(org)
 
 
 def _bookers(con, staff: set[str], ignore: set[int]) -> dict[int, tuple[int, str]]:
